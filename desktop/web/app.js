@@ -7,6 +7,10 @@ const listEl = $('list');
 // 不扫本机历史、不调拉起接口，纯粹用来截图和预览界面
 const DEMO = !!window.CR_DEMO;
 
+// --skin xx 启动参数只用于截图和脚本：地址栏带 #skin= 时强制这套皮肤，
+// 不写回 settings.json，免得截个图把用户自己的主题改了
+const FORCED_SKIN = ((location.hash.match(/[#&]skin=([a-z0-9]+)/i) || [])[1] || '').toLowerCase();
+
 const S = {
   all: [],
   byId: new Map(),
@@ -25,6 +29,7 @@ const S = {
   stats: {},
   roots: {},
   busy: false,
+  deep: null,   // 全文搜索结果：null 表示当前是普通列表
 };
 
 // 卡片展开后先显示这么多条，剩下的藏在「还有 N 个」后面
@@ -141,7 +146,7 @@ function applySettings(s) {
   $('set-window').value = String(S.settings.window);
   $('set-exclude').value = (S.settings.exclude || []).join('\n');
   syncRangeButtons();
-  applyTheme(S.settings.theme);
+  applyTheme(FORCED_SKIN || S.settings.theme);
 }
 
 // ---------------- 外观主题 ----------------
@@ -161,8 +166,11 @@ function applyTheme(name) {
     const next = skin === 'win98' ? 'neon' : 'win98';
     btn.title = `外观：${SKIN_NAME[skin]}（点击切到 ${SKIN_NAME[next]}）`;
   }
-  // 只作为下次启动首帧的垫片，真正生效以 settings.json 为准
-  try { localStorage.setItem('cli-resume-theme', skin); } catch (e) { /* 隐私模式 */ }
+  // 只作为下次启动首帧的垫片，真正生效以 settings.json 为准；
+  // 命令行强制的皮肤不写回去，否则截图会污染用户自己的设置
+  if (!FORCED_SKIN) {
+    try { localStorage.setItem('cli-resume-theme', skin); } catch (e) { /* 隐私模式 */ }
+  }
   // 终端模块在文件末尾，用钩子避免 const 的 TDZ
   if (typeof window.__termApplySkin === 'function') window.__termApplySkin(skin);
 }
@@ -268,7 +276,138 @@ function itemHtml(w, index) {
   </div>`;
 }
 
+// ---------------- 全文搜索 ----------------
+// 顶部搜索框默认只过滤目录和标题；敲回车才去会话正文里翻。
+// 索引是后端在后台建的，没建完时先给已有结果，顶上挂一条进度。
+
+function baseOf(p) {
+  const s = String(p || '').replace(/[\\/]+$/, '');
+  const i = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'));
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function roleLabel(r) {
+  if (r === 'user') return '你';
+  if (r === 'tool') return '工具';
+  return '答';
+}
+
+function renderDeep() {
+  const d = S.deep;
+  if (d.loading) {
+    listEl.innerHTML = `<div class="empty"><h3>正在翻“${esc(d.q)}”…</h3><p>稍等，正在把会话正文过一遍。</p></div>`;
+    $('meta').textContent = '全文搜索中…';
+    updateBar();
+    return;
+  }
+
+  const r = d.data || { hits: [], matched: 0, matches: 0, elapsedMs: 0, ready: true, files: 0, totalFiles: 0 };
+  const groups = new Map();
+  for (const h of r.hits || []) {
+    const key = `${h.tool}:${h.sessionId}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { head: h, rows: [], more: 0 };
+      groups.set(key, g);
+    }
+    // 一个会话最多铺 6 条，剩下的收成一行，不然一屏只能看到一个会话
+    if (g.rows.length < 6) g.rows.push(h);
+    else g.more += 1;
+  }
+
+  const head = `
+    <div class="deep-head">
+      <span class="deep-q">“${esc(d.q)}”</span>
+      <span class="deep-sub">${r.ready
+        ? `${r.matched} 个会话 · ${r.matches} 处命中 · ${r.elapsedMs} ms`
+        : `索引 ${r.files}/${r.totalFiles} · 先显示已有结果`}</span>
+      <button class="mini-btn" data-back="1">返回列表</button>
+    </div>`;
+
+  const body = groups.size
+    ? [...groups.values()].map((g, i) => {
+      const h = g.head;
+      const attrs = `data-enter="1" data-cwd="${esc(h.cwd)}" data-tool="${esc(h.tool)}"` +
+        ` data-sid="${esc(h.sessionId)}" data-title="${esc(h.title || h.cwd)}"`;
+      const rows = g.rows.map((x) => `
+          <div class="hit-row" ${attrs} title="进入这个对话：${esc(h.title || h.cwd)}">
+            <span class="hit-role ${esc(x.role)}">${roleLabel(x.role)}</span>
+            <span class="hit-text">${esc(x.before)}<mark>${esc(x.hit)}</mark>${esc(x.after)}</span>
+            <span class="hit-when">${esc(shortTime(x.ts))}</span>
+          </div>`).join('');
+      const more = g.more ? `<div class="hit-more">这个会话还有 ${g.more} 处没铺开</div>` : '';
+      return `
+        <div class="hit-group">
+          <div class="hit-grouphead" ${attrs}>
+            <span class="hit-no">${String(i + 1).padStart(2, '0')}</span>
+            <span class="hit-ws">${esc(baseOf(h.cwd))}</span>
+            <span class="hit-title">${esc(h.title || '（无标题）')}</span>
+            <span class="hit-count">${g.rows.length + g.more} 处</span>
+            <span class="sess-go">进入</span>
+          </div>
+          ${rows}${more}
+        </div>`;
+    }).join('')
+    : `<div class="empty"><h3>正文里没有“${esc(d.q)}”</h3>
+       <p>换个说法试试，或者想想这个词是在哪个项目里说过的。</p></div>`;
+
+  listEl.innerHTML = head + body;
+  $('meta').textContent = r.ready
+    ? `正文索引 ${r.totalFiles} 个会话 · ${r.entries} 条消息`
+    : `正在建立正文索引 ${r.files}/${r.totalFiles}`;
+  updateBar();
+}
+
+async function runDeepSearch(retry) {
+  const q = $('search').value.trim();
+  if (q.length < 2) {
+    toast('至少输两个字；只想过滤目录不用回车', true);
+    return;
+  }
+  if (DEMO) {
+    // 示例模式没有真实正文，demo.js 里备了几句样例，够看清结果长什么样
+    const data = typeof window.CR_DEMO_SEARCH === 'function' ? window.CR_DEMO_SEARCH(q) : null;
+    S.deep = data
+      ? { q, loading: false, data, tries: 0 }
+      : { q, loading: false, data: { hits: [], matched: 0, matches: 0, elapsedMs: 0, ready: true, files: 0, totalFiles: 0, entries: 0 }, tries: 0 };
+    render();
+    return;
+  }
+  if (!retry) S.deep = { q, loading: true, data: null, tries: 0 };
+
+  let r = null;
+  try {
+    r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=200`).then((x) => x.json());
+  } catch (e) {
+    // 走到下面统一报错
+  }
+  // 等待期间又搜了别的词，这次的结果就丢掉
+  if (!S.deep || S.deep.q !== q) return;
+  if (!r || !r.ok) {
+    S.deep = null;
+    toast('搜索失败', true);
+    render();
+    return;
+  }
+
+  const tries = S.deep.tries || 0;
+  S.deep = { q, loading: false, data: r, tries };
+  render();
+
+  // 索引还在建：过一秒多自动再拉一次，用户不用自己按第二遍
+  if (!r.ready && tries < 30) {
+    S.deep.tries = tries + 1;
+    setTimeout(() => {
+      if (S.deep && S.deep.q === q) runDeepSearch(true);
+    }, 1200);
+  }
+}
+
 function render() {
+  if (S.deep) {
+    renderDeep();
+    return;
+  }
   const list = visibleList();
   if (!list.length) {
     const hasAny = S.all.length > 0;
@@ -328,6 +467,13 @@ window.__onSelChange = function () {
 };
 
 listEl.addEventListener('click', (e) => {
+  const back = e.target.closest('[data-back]');
+  if (back) {
+    S.deep = null;
+    render();
+    return;
+  }
+
   // 会话行：直接进入这个对话
   const row = e.target.closest('[data-enter]');
   if (row) {
@@ -512,7 +658,17 @@ $('range').addEventListener('click', (e) => {
 let searchTimer = null;
 $('search').addEventListener('input', () => {
   clearTimeout(searchTimer);
+  // 已经出了全文结果，一改词就先退回列表，避免看着旧结果以为是新的
+  if (S.deep) S.deep = null;
   searchTimer = setTimeout(render, 120);
+});
+
+// 回车 = 去正文里翻，跟列表过滤是两回事
+$('search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    runDeepSearch();
+  }
 });
 
 $('refresh').addEventListener('click', () => load(true));
@@ -926,6 +1082,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
+    if (S.deep) {
+      S.deep = null;
+      render();
+      return;
+    }
     if ($('drawer').classList.contains('on')) { closeDrawer(); return; }
     if (document.activeElement === $('search') && $('search').value) {
       $('search').value = '';

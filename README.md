@@ -5,7 +5,7 @@
 不维护项目清单、不记笔记、不用手动 `cd` —— 直接读两个 CLI 自己落的会话历史，
 还原出「上次在哪些目录干活、会话 id 是多少」，然后 `--resume` 回去。
 桌面端还能把会话直接开在应用自己的终端面板里（ConPTY + xterm.js），不再弹外部终端窗口；
-多个会话并排看，也能随时切回外部终端。
+多个会话并排看，也能随时切回外部终端。想不起上次在哪个目录说过某件事，回车直接搜会话正文。
 
 <img src="desktop/docs/desktop.png" width="49%" alt="80s 霓虹皮肤">
 <img src="desktop/docs/w98-desktop.png" width="49%" alt="Windows 98 皮肤">
@@ -85,6 +85,25 @@ codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里
 
 <img src="desktop/docs/term.png" width="49%" alt="霓虹：两个终端并排">
 <img src="desktop/docs/w98-term.png" width="49%" alt="98：两个终端并排">
+
+## 全文搜索
+
+列表上方那个搜索框默认只过滤目录名和对话标题。**敲回车**才去会话正文里翻 ——
+「上次那个 hydration 报错是在哪问的」，凭记忆搜一句话比翻目录快得多。
+
+命中按会话分组显示，每条留前后文并高亮关键词，左右标出是「你」说的还是「答」的；
+点任意一行直接进那个会话。搜索的范围是全部历史，不受上面「今天 / 7 天 / 30 天」限制。
+
+索引在本地后台建：`desktop/src/search.cpp` 把每份 jsonl 的正文抽出来，一个会话一个索引文件，
+落在 `%LOCALAPPDATA%\CliResumeGui\search\`。源文件 mtime 和大小没变就不再重读，
+所以除第一次要通读一遍（这台机器上 200 个会话约 6 秒），之后启动几乎不花时间，查一次 2~3 ms。
+
+- 只收人说的话和助手的回答；`tool_result`（整屏命令输出）不进索引，那部分占了文件体积的大头又搜不出东西
+- 单条消息留 700 字、单个会话留 1.5MB：长会话后面会被截断，保留的通常是事情的起因，更值得搜
+- 子代理的旁支对话（`isSidechain`）跳过，否则一个词能搜出十几条重复
+
+<img src="desktop/docs/search.png" width="49%" alt="霓虹：全文搜索">
+<img src="desktop/docs/w98-search.png" width="49%" alt="98：全文搜索">
 
 ## 它怎么知道你在哪些目录干过活
 

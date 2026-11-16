@@ -51,8 +51,9 @@ json defaultSettings() {
 Backend::Backend(std::string webRoot) : webRoot_(std::move(webRoot)) {
   const char* la = std::getenv("LOCALAPPDATA");
   std::string base = la && *la ? std::string(la) : (homeDir() + "\\AppData\\Local");
-  settingsPath_ = base + "\\CliResumeGui\\settings.json";
-  CreateDirectoryA((base + "\\CliResumeGui").c_str(), nullptr);
+  dataDir_ = base + "\\CliResumeGui";
+  settingsPath_ = dataDir_ + "\\settings.json";
+  CreateDirectoryA(dataDir_.c_str(), nullptr);
 }
 
 std::string Backend::url() const {
@@ -173,6 +174,41 @@ void Backend::setupRoutes() {
     }
     json out = scanCached(maxAge, force);
     out["settings"] = loadSettings();
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 跨会话正文检索：索引在后台建，没建完时前端显示进度，不影响列表使用
+  srv_.Get("/api/search", [this](const httplib::Request& req, httplib::Response& res) {
+    std::string q = req.has_param("q") ? req.get_param_value("q") : "";
+    int limit = 300;
+    try {
+      if (req.has_param("limit")) limit = std::stoi(req.get_param_value("limit"));
+    } catch (...) {
+    }
+    SearchReply r = search_.query(q, limit);
+
+    json hits = json::array();
+    for (const auto& h : r.hits) {
+      hits.push_back({{"cwd", h.cwd},
+                      {"title", h.title},
+                      {"tool", h.tool},
+                      {"sessionId", h.sessionId},
+                      {"role", h.role},
+                      {"ts", h.ts},
+                      {"before", h.before},
+                      {"hit", h.hit},
+                      {"after", h.after}});
+    }
+    json out = {{"ok", true},
+                {"ready", r.ready},
+                {"files", r.files},
+                {"totalFiles", r.totalFiles},
+                {"entries", r.entries},
+                {"matched", r.matchedSessions},
+                {"matches", r.totalMatches},
+                {"elapsedMs", r.elapsedMs},
+                {"hits", hits}};
     res.set_header("Cache-Control", "no-store");
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
@@ -346,6 +382,8 @@ void Backend::setupRoutes() {
 
 bool Backend::start() {
   setupRoutes();
+  // 索引尽早开始建：第一次要通读几十上百个会话文件，早点跑完用户少等
+  search_.start(dataDir_);
   // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
   // 两三个终端再叠加页面请求就会排队
   srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };
@@ -368,6 +406,7 @@ bool Backend::start() {
 }
 
 void Backend::stop() {
+  search_.stop();
   terms_.closeAll();
   srv_.stop();
 }

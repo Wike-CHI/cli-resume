@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "httplib.h"
+#include "search.h"
 #include "terminal.h"
 
 namespace crg {
@@ -29,8 +30,10 @@ class Backend {
   httplib::Server srv_;
   std::string webRoot_;
   std::string settingsPath_;
+  std::string dataDir_;
   int port_ = 0;
   TermManager terms_;
+  SearchIndex search_;
 
   std::mutex scanMu_;
   json cached_ = json::object();

@@ -940,6 +940,49 @@ html[data-skin="win98"] .term-box .xterm-viewport::-webkit-scrollbar-thumb {
   box-shadow: var(--raise);
 }
 
+/* ---------------- 全文搜索结果 ---------------- */
+
+html[data-skin="win98"] .deep-head { border-bottom: 1px solid var(--face-lo); }
+html[data-skin="win98"] .deep-q { color: var(--navy); font-weight: 700; text-shadow: none; }
+html[data-skin="win98"] .deep-sub { color: var(--faint); }
+/* 终端工具栏那套 .mini-btn 是 20px 方钮，这里要压回来 */
+html[data-skin="win98"] .deep-head .mini-btn {
+  width: auto;
+  height: 22px;
+  padding: 0 10px;
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+/* 结果按「一屏白纸」处理：外面一圈凹陷，组头是灰的，选中行整条反白 */
+html[data-skin="win98"] .hit-group {
+  padding: 2px;
+  border: none;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="win98"] .hit-grouphead {
+  background: var(--face);
+  border-bottom: 1px solid var(--face-lo);
+}
+html[data-skin="win98"] .hit-grouphead:hover { background: var(--face-hi); }
+html[data-skin="win98"] .hit-ws { font-weight: 700; }
+html[data-skin="win98"] .hit-row { border-left: 0; padding-left: 6px; }
+html[data-skin="win98"] .hit-row:hover {
+  background: var(--navy);
+  border-left-color: var(--navy);
+}
+html[data-skin="win98"] .hit-row:hover .hit-text,
+html[data-skin="win98"] .hit-row:hover .hit-role,
+html[data-skin="win98"] .hit-row:hover .hit-when { color: #ffffff; }
+html[data-skin="win98"] .hit-text { color: #000000; font-size: 12px; }
+html[data-skin="win98"] .hit-text mark { background: #ffff00; color: #000000; }
+/* 9px 的宋体只剩一团像素，98 里所有字至少 11px */
+html[data-skin="win98"] .hit-role,
+html[data-skin="win98"] .hit-role.user { color: var(--magenta); font-family: var(--ui); font-size: 11px; min-width: 26px; }
+html[data-skin="win98"] .hit-role.tool { color: var(--faint); }
+
 /* 窄屏时左栏收起，和霓虹皮肤一致；这里只是把栅格宽度对齐 */
 @media (max-width: 940px) {
   html[data-skin="win98"] .body { grid-template-columns: 210px 1fr; }

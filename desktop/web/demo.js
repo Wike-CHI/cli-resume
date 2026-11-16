@@ -149,4 +149,60 @@
       exclude: [],
     },
   };
+
+  // 示例模式下的全文搜索：没有真实正文，用几句典型的技术讨论拼出命中，
+  // 够看清「按会话分组 + 高亮命中」长什么样；真机上搜的是会话正文。
+  const CANNED = [
+    { ws: 0, role: 'user', text: '首页 SSR 在弱网下还是慢，能不能先流出 shell，剩下的等数据回来再补？' },
+    { ws: 0, role: 'asst', text: '可以，换成流式渲染后先吐 head 和骨架屏，首屏大约提前 400ms，剩下的按 suspense 边界补。' },
+    { ws: 0, role: 'user', text: '图片组件现在一把梭原图，移动端流量扛不住，想换成响应式 srcset。' },
+    { ws: 1, role: 'asst', text: '这批任务重复跑了三次，加一层按 (date, source) 的去重键，重跑就不会重复入库。' },
+    { ws: 1, role: 'user', text: '增量同步卡在上游分页，每页都要重新计数，能不能改成游标。' },
+    { ws: 2, role: 'asst', text: '内存占用主要来自缓存了整份会话历史，改成按 mtime 失效之后，常驻降到 200MB 左右。' },
+    { ws: 2, role: 'user', text: '重开窗口后列表停在第四项，看不到第一条，像是滚动锚定在补偿位置。' },
+    { ws: 3, role: 'asst', text: '样式拆成两层：一层管尺寸栅格，一层只管配色，换肤时就不会互相打架。' },
+    { ws: 3, role: 'user', text: '流式输出接进来之后，终端里要处理 \\r 覆盖和光标位置，不然进度条会刷屏。' },
+    { ws: 1, role: 'user', text: '脚本输出太吵了，能不能每个任务只留一行摘要，顺便把会话里跑过的命令记下来。' },
+  ];
+
+  window.CR_DEMO_SEARCH = function (q) {
+    const needle = String(q || '').toLowerCase();
+    const hits = [];
+    let matched = 0;
+    const seen = new Set();
+    for (const line of CANNED) {
+      const ws = workspaces[line.ws];
+      if (!ws) continue;
+      const pos = line.text.toLowerCase().indexOf(needle);
+      if (pos < 0) continue;
+      const s = ws.sessions[0];
+      if (!s) continue;
+      const before = (pos > 24 ? '…' : '') + line.text.slice(Math.max(0, pos - 24), pos);
+      const after = line.text.slice(pos + needle.length, pos + needle.length + 60) +
+        (pos + needle.length + 60 < line.text.length ? '…' : '');
+      hits.push({
+        cwd: ws.cwd,
+        title: s.title,
+        tool: s.tool,
+        sessionId: s.sessionId,
+        role: line.role,
+        ts: s.mtime,
+        before,
+        hit: line.text.slice(pos, pos + needle.length),
+        after,
+      });
+      if (!seen.has(ws.cwd)) { seen.add(ws.cwd); matched += 1; }
+    }
+    return {
+      ok: true,
+      ready: true,
+      files: workspaces.length,
+      totalFiles: workspaces.length,
+      entries: CANNED.length,
+      matched,
+      matches: hits.length,
+      elapsedMs: 3,
+      hits,
+    };
+  };
 })();

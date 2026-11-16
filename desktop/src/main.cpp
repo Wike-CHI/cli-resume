@@ -84,6 +84,15 @@ std::string actionScript(const std::string& act) {
     return "var s=document.getElementById('search');s.value='ai';"
            "s.dispatchEvent(new Event('input'));";
   }
+  if (act == "deep") {
+    // 走真实的回车路径：填词 → 派发 keydown，验证搜索框的回车绑定
+    return "var s=document.getElementById('search');s.value='流式';s.focus();"
+           "s.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));";
+  }
+  if (act == "hit") {
+    // 点第一条命中，验证「搜到 → 直接进那个会话」
+    return "var r=document.querySelectorAll('.hit-row');if(r.length)r[0].click();";
+  }
   if (act == "theme") {
     return "var b=document.getElementById('theme-btn');if(b)b.click();";
   }
@@ -274,11 +283,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   // --demo：加载内置示例数据，不扫本机历史也不拉起终端，用来截图或给人预览界面
   std::string baseUrl = backend.url();
   // backend.url() 自带尾斜杠，直接接 hash，别再补一个 "/"
-  if (hasArg("--demo")) {
-    baseUrl += "#demo";
-    // --skin win98 让示例模式直接用某套皮肤启动，截图时不必再点一次切换
-    std::string skin = getArgValue("--skin", "");
-    if (!skin.empty()) baseUrl += "&skin=" + skin;
+  if (hasArg("--demo")) baseUrl += "#demo";
+  // --skin win98 直接指定皮肤，截图时不必先点一次切换；
+  // 示例模式和非示例模式都认，后者走 #skin= 由 app.js 读
+  std::string skin = getArgValue("--skin", "");
+  if (!skin.empty()) {
+    baseUrl += baseUrl.find('#') == std::string::npos ? "#skin=" : "&skin=";
+    baseUrl += skin;
   }
   std::wstring url = crg::utf8ToWide(baseUrl);
 
