@@ -24,6 +24,8 @@ const S = {
     useContinue: false,
     window: 0,
     theme: 'neon',
+    termMode: 'embedded',
+    restoreLayout: true,
     exclude: [],
   },
   stats: {},
@@ -144,6 +146,10 @@ function applySettings(s) {
   $('opt-cont').checked = !!S.settings.useContinue;
   $('set-range').value = String(S.settings.maxAgeHours);
   $('set-window').value = String(S.settings.window);
+  const tm = $('set-term');
+  if (tm) tm.value = S.settings.termMode === 'external' ? 'external' : 'embedded';
+  const rs = $('set-restore');
+  if (rs) rs.value = S.settings.restoreLayout === false ? '0' : '1';
   $('set-exclude').value = (S.settings.exclude || []).join('\n');
   syncRangeButtons();
   applyTheme(FORCED_SKIN || S.settings.theme);
@@ -736,7 +742,8 @@ $('set-save').addEventListener('click', async () => {
   const maxAgeHours = Number($('set-range').value);
   const win = Number($('set-window').value);
   const termMode = $('set-term') ? $('set-term').value : 'embedded';
-  await saveSettings({ exclude, maxAgeHours, window: win, termMode });
+  const restoreLayout = !$('set-restore') || $('set-restore').value !== '0';
+  await saveSettings({ exclude, maxAgeHours, window: win, termMode, restoreLayout });
   S.range = maxAgeHours;
   S.rangeTouched = true;
   syncRangeButtons();
@@ -786,7 +793,7 @@ const TERM_THEMES = {
   },
 };
 
-const TM = { panes: [], active: null };
+const TM = { panes: [], active: null, restoring: false, restored: false };
 
 function termSkin() {
   return S.settings.theme === 'win98' ? 'win98' : 'neon';
@@ -826,10 +833,89 @@ function termShow() {
   const d = $('termdock');
   d.hidden = false;
   d.classList.remove('collapsed');
+  termSaveLayout();
 }
 
 function termCollapse() {
   $('termdock').classList.add('collapsed');
+  termSaveLayout();
+}
+
+// ---------------- 布局记忆 ----------------
+// 存的是「怎么起来」：目录 + 启动命令，而命令里已经带着 --resume，
+// 所以下次启动铺回来还是那几个会话，不是几个空 shell。
+
+let layoutTimer = null;
+
+function termSnapshot() {
+  const dock = $('termdock');
+  return {
+    visible: !dock.hidden && !dock.classList.contains('collapsed'),
+    height: Math.round(dock.getBoundingClientRect().height) || 0,
+    active: Math.max(0, TM.panes.indexOf(TM.active)),
+    panes: TM.panes.map((p) => ({
+      cwd: p.cwd || '',
+      cmd: p.cmd || '',
+      title: p.title || '',
+      tool: p.tool || '',
+      sessionId: p.sessionId || '',
+    })),
+  };
+}
+
+function termSaveLayout() {
+  // 恢复过程中每次 termAddPane 都会写一次，那时 panes 还不齐，写下去会把布局截断
+  if (DEMO || TM.restoring) return;
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(() => {
+    fetch('/api/layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(termSnapshot()),
+    }).catch(() => {});
+  }, 350);
+}
+
+// 铺回上次的窗格。空布局什么都不做 —— 别让第一次打开的人凭空多出一块面板。
+async function termRestoreLayout() {
+  if (DEMO || TM.restored) return;
+  TM.restored = true;
+  if (S.settings.restoreLayout === false) return;
+
+  let lay = null;
+  try {
+    lay = await fetch('/api/layout').then((r) => r.json());
+  } catch (e) {
+    return;
+  }
+  const panes = lay && Array.isArray(lay.panes) ? lay.panes.slice(0, 4) : [];
+  if (!panes.length) return;
+  // 上次是收起状态就不恢复了：掀起来只会得到几个看不见的 CLI 进程，
+  // 用户既没看见也没法操作，白占内存
+  if (!lay.visible) return;
+
+  TM.restoring = true;
+  // 高度先定下来，窗格按最终尺寸开，省得开完再缩一次、ConPTY 白重排两遍。
+  // 上次是在大窗口里拖的 600px，这次窗口小了就按视口压回来，别把列表挤没
+  const dock = $('termdock');
+  const h = Math.min(Math.round(Number(lay.height) || 0), Math.round(window.innerHeight * 0.7));
+  if (h >= 120) dock.style.flexBasis = h + 'px';
+  for (const p of panes) {
+    await termAddPane({
+      cwd: p.cwd || '',
+      cmd: p.cmd || '',
+      title: p.title || 'shell',
+      tool: p.tool || '',
+      sessionId: p.sessionId || '',
+    });
+  }
+  const idx = Math.min(Math.max(0, Number(lay.active) || 0), TM.panes.length - 1);
+  if (TM.panes[idx]) {
+    TM.active = TM.panes[idx];
+    termLayout();
+  }
+  TM.restoring = false;
+  termSaveLayout();
 }
 
 // 1 个占满、2 个并排、3~4 个两行两列 —— 就是「分窗口并行看」
@@ -925,6 +1011,7 @@ async function termAddPane(opt = {}) {
   const pane = {
     id: '', term, fit, el, ws: null,
     title: opt.title || 'terminal', cwd: opt.cwd || '', cmd: opt.cmd || '',
+    tool: opt.tool || '', sessionId: opt.sessionId || '',
     cols: 0, rows: 0, ro: null,
   };
   TM.panes.push(pane);
@@ -984,6 +1071,7 @@ async function termAddPane(opt = {}) {
     plog('term open fail ' + e.message);
   }
   termRenderTabs();
+  termSaveLayout();
   return pane;
 }
 
@@ -1008,6 +1096,7 @@ function termClosePane(pane) {
   TM.active = TM.panes[Math.min(i, TM.panes.length - 1)] || null;
   termLayout();
   if (!TM.panes.length) termCollapse();
+  termSaveLayout();
 }
 
 function termCmdFor(it) {
@@ -1018,7 +1107,10 @@ function termCmdFor(it) {
 
 async function termOpenItems(items) {
   for (const it of items) {
-    await termAddPane({ cwd: it.cwd, cmd: termCmdFor(it), title: it.title || it.cwd });
+    await termAddPane({
+      cwd: it.cwd, cmd: termCmdFor(it), title: it.title || it.cwd,
+      tool: it.tool, sessionId: it.sessionId,
+    });
   }
 }
 
@@ -1048,6 +1140,7 @@ $('term-tabs').addEventListener('click', (e) => {
   TM.active = p;
   termLayout();
   p.term.focus();
+  termSaveLayout();
 });
 
 // 拖顶边改高度
@@ -1064,6 +1157,7 @@ $('term-drag').addEventListener('mousedown', (e) => {
   const up = () => {
     document.removeEventListener('mousemove', move);
     document.removeEventListener('mouseup', up);
+    termSaveLayout();
   };
   document.addEventListener('mousemove', move);
   document.addEventListener('mouseup', up);
@@ -1116,5 +1210,5 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000);
 
-// 启动
-load(false);
+// 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
+load(false).then(() => termRestoreLayout());

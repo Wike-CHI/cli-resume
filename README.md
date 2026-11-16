@@ -82,6 +82,8 @@ codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里
 - **入口**：顶栏终端图标随手开一个空 shell；左栏「进入方式」决定「进入」是内嵌还是弹外部终端
 - **回收**：关掉窗格或退出应用，ConPTY 会话连同里面的 node 进程一起结束（子进程挂在 job 上，
   应用被强杀也不留孤儿）
+- **恢复现场**：开着哪几个窗格、各自在哪个目录、面板多高都记在 `layout.json`，下次启动原样铺回来。
+  存的是「怎么起来」——启动命令里带着 `--resume`，所以恢复的还是原来那几个会话，不是几个空 shell
 
 <img src="desktop/docs/term.png" width="49%" alt="霓虹：两个终端并排">
 <img src="desktop/docs/w98-term.png" width="49%" alt="98：两个终端并排">

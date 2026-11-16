@@ -42,6 +42,7 @@ json defaultSettings() {
       {"window", 0},
       {"theme", "neon"},  // "neon"（80s CRT）| "win98"
       {"termMode", "embedded"},  // "embedded"（应用内终端）| "external"（Windows Terminal）
+      {"restoreLayout", true},   // 启动时按上次的窗格铺开并自动 --resume
       {"exclude", json::array({"\\temp\\", "\\system32", "\\node_modules\\", "\\appdata\\local\\temp"})},
   };
 }
@@ -53,6 +54,7 @@ Backend::Backend(std::string webRoot) : webRoot_(std::move(webRoot)) {
   std::string base = la && *la ? std::string(la) : (homeDir() + "\\AppData\\Local");
   dataDir_ = base + "\\CliResumeGui";
   settingsPath_ = dataDir_ + "\\settings.json";
+  layoutPath_ = dataDir_ + "\\layout.json";
   CreateDirectoryA(dataDir_.c_str(), nullptr);
 }
 
@@ -81,6 +83,28 @@ void Backend::saveSettings(const json& s) const {
   std::ofstream f(utf8ToWide(settingsPath_), std::ios::binary | std::ios::trunc);
   if (!f) return;
   f << dumpJson(s);
+}
+
+// 布局文件坏了就当没有：界面照常起来，只是不恢复窗格。
+// 这里不做字段校验，panes 里放什么由前端解释，后端只负责搬运。
+json Backend::loadLayout() const {
+  json def = json{{"visible", false}, {"height", 0}, {"active", 0}, {"panes", json::array()}};
+  std::string raw;
+  if (!readWholeFile(layoutPath_, raw) || raw.empty()) return def;
+  try {
+    json j = json::parse(raw);
+    if (!j.is_object()) return def;
+    if (!j.contains("panes") || !j["panes"].is_array()) return def;
+    return j;
+  } catch (...) {
+    return def;
+  }
+}
+
+void Backend::saveLayout(const json& l) const {
+  std::ofstream f(utf8ToWide(layoutPath_), std::ios::binary | std::ios::trunc);
+  if (!f) return;
+  f << dumpJson(l);
 }
 
 // 宿主在创建窗口时就要知道底色，否则深色主题启动会闪一块浅色
@@ -285,6 +309,31 @@ void Backend::setupRoutes() {
   srv_.Post("/api/log", [](const httplib::Request& req, httplib::Response& res) {
     logf("[page] " + req.body.substr(0, 400));
     res.set_content("{}", "application/json; charset=utf-8");
+  });
+
+  // ---------------- 终端布局 ----------------
+  // 前端每开/关一个窗格、拖完高度就 POST 一次（自带 350ms 防抖），
+  // 下次启动读回来，原样铺开。存的是「怎么起来」而不是会话状态：
+  // cmd 里已经带着 --resume，重启后还是那个会话。
+  srv_.Get("/api/layout", [this](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(loadLayout()), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/layout", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      if (!body.is_object() || !body.contains("panes") || !body["panes"].is_array()) {
+        out["error"] = "布局格式不对：需要 panes 数组";
+      } else {
+        saveLayout(body);
+        out = {{"ok", true}, {"panes", body["panes"].size()}};
+      }
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 
   // ---------------- 内嵌终端 ----------------

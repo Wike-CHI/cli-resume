@@ -25,11 +25,16 @@ class Backend {
   json scanCached(int maxAgeHours, bool force);
   json loadSettings() const;
   void saveSettings(const json& s) const;
+  // 终端布局（开着哪几个窗格、各自在哪个目录、面板多高）单独存一个文件：
+  // 它每开一个窗格就写一次，和「用户点保存」才变的设置不是一回事
+  json loadLayout() const;
+  void saveLayout(const json& l) const;
   bool handleStatic(const std::string& path, httplib::Response& res);
 
   httplib::Server srv_;
   std::string webRoot_;
   std::string settingsPath_;
+  std::string layoutPath_;
   std::string dataDir_;
   int port_ = 0;
   TermManager terms_;
