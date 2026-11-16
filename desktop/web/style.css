@@ -428,6 +428,15 @@ html, body {
   line-height: 1.65;
   font-size: 10.5px;
 }
+/* 多行输入框内容超出时会冒出系统浅色滚动条，跟深色底打架 */
+.field textarea::-webkit-scrollbar { width: 8px; }
+.field textarea::-webkit-scrollbar-track { background: rgba(0, 0, 0, .35); }
+.field textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, .26);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+.field textarea::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, .45); background-clip: padding-box; }
 .field select:focus,
 .field textarea:focus {
   border-color: var(--line-hot);

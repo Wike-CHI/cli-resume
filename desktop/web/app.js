@@ -19,6 +19,7 @@ const S = {
     openTwo: false,
     useContinue: false,
     window: 0,
+    theme: 'neon',
     exclude: [],
   },
   stats: {},
@@ -140,6 +141,28 @@ function applySettings(s) {
   $('set-window').value = String(S.settings.window);
   $('set-exclude').value = (S.settings.exclude || []).join('\n');
   syncRangeButtons();
+  applyTheme(S.settings.theme);
+}
+
+// ---------------- 外观主题 ----------------
+// 皮肤全部挂在 html[data-skin] 上，样式在 style.css 与 theme-win98.css 里，
+// 这里只负责换属性和记下来；别处不要再写内联样式，否则换代就漏。
+const SKINS = ['neon', 'win98'];
+const SKIN_NAME = { neon: '80s 霓虹 CRT', win98: 'Windows 98' };
+
+function applyTheme(name) {
+  const skin = SKINS.includes(name) ? name : 'neon';
+  S.settings.theme = skin;
+  document.documentElement.dataset.skin = skin;
+  const sel = $('set-theme');
+  if (sel && sel.value !== skin) sel.value = skin;
+  const btn = $('theme-btn');
+  if (btn) {
+    const next = skin === 'win98' ? 'neon' : 'win98';
+    btn.title = `外观：${SKIN_NAME[skin]}（点击切到 ${SKIN_NAME[next]}）`;
+  }
+  // 只作为下次启动首帧的垫片，真正生效以 settings.json 为准
+  try { localStorage.setItem('cli-resume-theme', skin); } catch (e) { /* 隐私模式 */ }
 }
 
 function syncRangeButtons() {
@@ -528,6 +551,19 @@ function closeDrawer() {
 
 $('settings-btn').addEventListener('click', openDrawer);
 $('drawer-close').addEventListener('click', closeDrawer);
+
+// 顶栏那个按钮只是「换一套」，设置里的下拉才是明确选择
+$('theme-btn').addEventListener('click', () => {
+  const next = S.settings.theme === 'win98' ? 'neon' : 'win98';
+  applyTheme(next);
+  saveSettings({ theme: next });
+  toast(`外观：${SKIN_NAME[next]}`);
+});
+
+$('set-theme').addEventListener('change', () => {
+  applyTheme($('set-theme').value);
+  saveSettings({ theme: S.settings.theme });
+});
 
 $('set-save').addEventListener('click', async () => {
   const exclude = $('set-exclude').value.split('\n').map((s) => s.trim()).filter(Boolean);

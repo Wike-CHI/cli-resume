@@ -74,48 +74,74 @@ void resizeWebView(HWND hwnd) {
   g_app.controller->put_Bounds(rc);
 }
 
+// --ui 的一个动作 → 一段 JS（外层 IIFE 由调用方拼）。
+// 拆成这样是为了能连用，例如 --ui theme,expand 先换皮肤再展开。
+std::string actionScript(const std::string& act) {
+  if (act == "settings") {
+    return "document.getElementById('settings-btn').click();";
+  }
+  if (act == "search") {
+    return "var s=document.getElementById('search');s.value='ai';"
+           "s.dispatchEvent(new Event('input'));";
+  }
+  if (act == "theme") {
+    return "var b=document.getElementById('theme-btn');if(b)b.click();";
+  }
+  if (act == "expand") {
+    // 只展开第一个目录：截图里既能看到对话列表，也能看到下面几张未展开的卡片
+    return "var c=document.querySelectorAll('.ws-card');if(c.length)c[0].click();";
+  }
+  if (act == "enter") {
+    // 展开第一个目录并点进第一条对话，验证「点一下就进去」这条路
+    return "var c=document.querySelectorAll('.ws-card');if(c.length){c[0].click();"
+           "var r=document.querySelectorAll('.sess-row');if(r.length)r[0].click();}";
+  }
+  if (act == "select") {
+    return "var b=document.querySelectorAll('.ws-check');"
+           "for(var i=0;i<Math.min(3,b.length);i++){b[i].checked=true;}"
+           "if(window.__onSelChange)window.__onSelChange();";
+  }
+  return "";  // 不认识的动作就当没有，截图仍是首屏原貌
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
     case WM_SIZE:
       resizeWebView(hwnd);
       return 0;
-    case WM_APP_CAPTURE:
+    case WM_APP_CAPTURE: {
       crg::logf("WM_APP_CAPTURE shot=" + g_app.shotPath);
+      // 指针停在某一行上会让截图里多出一条 hover 高亮，先把它挪到列标题条上，
+      // 那里没有 hover 样式，图才干净
+      RECT rc;
+      if (GetWindowRect(hwnd, &rc)) SetCursorPos(rc.left + 420, rc.top + 46);
       if (g_app.webview && !g_app.shotPath.empty()) capturePreview(g_app.webview, g_app.shotPath, hwnd);
       return 0;
-    case WM_APP_AUTO:
-      // 调试用：--ui 取 settings / search / expand / enter / select，默认不动界面
+    }
+    case WM_APP_AUTO: {
+      // 调试用：--ui 可以逗号串多个动作（theme / settings / search / expand / enter / select）。
+      // 动作之间留 280ms，让界面有机会重绘再截下一屏。
       if (g_app.webview) {
-        std::wstring script;
-        if (g_app.autoUi == "settings") {
-          script = L"(function(){document.getElementById('settings-btn').click();})()";
-        } else if (g_app.autoUi == "search") {
-          script =
-              L"(function(){var s=document.getElementById('search');s.value='ai';"
-              L"s.dispatchEvent(new Event('input'));})()";
-        } else if (g_app.autoUi == "expand") {
-          // 只展开第一个目录：截图里既能看到对话列表，也能看到下面几张未展开的卡片
-          script =
-              L"(function(){var c=document.querySelectorAll('.ws-card');"
-              L"for(var i=0;i<Math.min(1,c.length);i++){c[i].click();}})()";
-        } else if (g_app.autoUi == "enter") {
-          // 展开第一个目录并点进第一条对话，验证「点一下就进去」这条路
-          script =
-              L"(function(){var c=document.querySelectorAll('.ws-card');if(!c.length)return;"
-              L"c[0].click();setTimeout(function(){var r=document.querySelectorAll('.sess-row');"
-              L"if(r.length)r[0].click();},150);})()";
-        } else if (g_app.autoUi == "select") {
-          script =
-              L"(function(){var b=document.querySelectorAll('.ws-check');"
-              L"for(var i=0;i<Math.min(3,b.length);i++){b[i].checked=true;}"
-              L"if(window.__onSelChange)window.__onSelChange();})()";
-        } else {
-          // 默认什么都不做，截图就是首屏原貌
-          script = L"(function(){})()";
+        std::string js = "(function(){var a=[";
+        std::string cur;
+        auto flush = [&]() {
+          if (cur.empty()) return;
+          std::string body = actionScript(cur);
+          if (!body.empty()) js += "function(){" + body + "},";
+          cur.clear();
+        };
+        for (char c : g_app.autoUi) {
+          if (c == ',') flush();
+          else cur.push_back(c);
         }
-        g_app.webview->ExecuteScript(script.c_str(), nullptr);
+        flush();
+        js += "];var i=0;(function next(){if(i>=a.length)return;a[i++]();setTimeout(next,280);})();})()";
+        std::wstring wjs = crg::utf8ToWide(js);
+        crg::logf("auto ui: " + g_app.autoUi);
+        g_app.webview->ExecuteScript(wjs.c_str(), nullptr);
       }
       return 0;
+    }
     case WM_DESTROY:
       PostQuitMessage(0);
       return 0;
@@ -216,13 +242,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   wc.hIconSm = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON,
                                  GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
                                  LR_SHARED);
-  // 底色跟 CRT 主题的紫黑一致，否则 WebView2 首帧之前会闪一块白
-  wc.hbrBackground = CreateSolidBrush(RGB(5, 2, 11));
+  // 底色要跟当前主题一致，否则 WebView2 首帧之前会闪一块不属于该主题的颜色
+  wc.hbrBackground = CreateSolidBrush(
+      backend.theme() == "win98" ? RGB(192, 192, 192) : RGB(5, 2, 11));
   wc.lpszClassName = kClassName;
   RegisterClassExW(&wc);
 
-  HWND hwnd = CreateWindowExW(0, kClassName, kTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
-                              CW_USEDEFAULT, 1180, 820, nullptr, nullptr, hInst, nullptr);
+  // CW_USEDEFAULT 交给系统放置时，窗口大小每次会被系统再调一遍，
+  // 截图就一张大一张小；自己算居中位置，尺寸才稳定
+  const int kWinW = 1180, kWinH = 820;
+  int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+  int wx = (sw - kWinW) / 2, wy = (sh - kWinH) / 2;
+  if (wx < 0) wx = 0;
+  if (wy < 0) wy = 0;
+
+  HWND hwnd = CreateWindowExW(0, kClassName, kTitle, WS_OVERLAPPEDWINDOW, wx, wy,
+                              kWinW, kWinH, nullptr, nullptr, hInst, nullptr);
   if (!hwnd) return 1;
   ShowWindow(hwnd, SW_SHOW);
 
@@ -230,7 +265,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   // --demo：加载内置示例数据，不扫本机历史也不拉起终端，用来截图或给人预览界面
   std::string baseUrl = backend.url();
   // backend.url() 自带尾斜杠，直接接 hash，别再补一个 "/"
-  if (hasArg("--demo")) baseUrl += "#demo";
+  if (hasArg("--demo")) {
+    baseUrl += "#demo";
+    // --skin win98 让示例模式直接用某套皮肤启动，截图时不必再点一次切换
+    std::string skin = getArgValue("--skin", "");
+    if (!skin.empty()) baseUrl += "&skin=" + skin;
+  }
   std::wstring url = crg::utf8ToWide(baseUrl);
 
   auto envHandler = Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(

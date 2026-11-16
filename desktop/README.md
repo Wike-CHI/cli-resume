@@ -3,10 +3,17 @@
 重启后不知道上次在哪几个项目干活、每个目录聊到哪了 —— 这个窗口把现场摊开给你看，
 点一行就进那一条对话。
 
-界面是 80 年代合成器浪潮那套语言：紫黑底、青与品红双霓虹、CRT 扫描线、
-底部网格地平线，标题用录像带式的色散效果。不是套一层主题皮肤——布局也跟着改了。
+界面有两套皮肤，共用同一份布局：
 
-<img src="docs/desktop.png" width="880" alt="目录列表">
+- **80s 霓虹 CRT**（默认）：紫黑底、青与品红双霓虹、CRT 扫描线、网格地平线、录像带式的色散字标
+- **Windows 98**：`#c0c0c0` 灰面板、四层 1px 立体线、深蓝选中行、宋体小字、16px 经典滚动条
+
+顶栏那个四格图标点一下换一套，左栏「外观主题」也能选；选择写进 `settings.json`，下次启动直接是上次那套。
+
+<img src="docs/desktop.png" width="49%" alt="80s 霓虹">
+<img src="docs/w98-desktop.png" width="49%" alt="Windows 98">
+
+不是套一层配色——布局也跟着主题改过：顶栏、左栏常驻控制台、主屏幕、操作台。
 
 ## 和命令行版的区别
 
@@ -59,11 +66,15 @@ build.bat
 ```
 bin\cli-resume.exe                     正常启动
 bin\cli-resume.exe --demo              用内置示例数据，不扫本机历史（看界面用）
+bin\cli-resume.exe --demo --skin win98 示例模式直接用某套皮肤进（neon | win98）
 bin\cli-resume.exe --shot a.png --wait 2500        截图后退出（调试用）
 bin\cli-resume.exe --demo --ui settings --shot a.png   高亮设置区再截图
 bin\cli-resume.exe --demo --ui expand --shot a.png     展开第一个目录再截图
 bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条（会真的开终端）
 ```
+
+`--ui` 可以逗号串多个动作，按 280ms 间隔依次执行，例如
+`--ui theme,expand`、`--ui theme,settings`。
 
 `--demo` 加 `#demo` 到页面地址，前端 `demo.js` 检测到就改用内置假数据，
 并且把「进入」「定位」「保存设置」都拦成提示，不会真的拉起终端。
@@ -88,11 +99,14 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 - **进入**：点对话行（或卡片上的「进入」按钮走最近那条），直接在 Windows Terminal 里 `--resume` 那条会话
 - **定位**：在资源管理器里打开这个目录
 
-<img src="docs/sessions.png" width="880" alt="展开后的对话列表">
+<img src="docs/sessions.png" width="49%" alt="霓虹：展开后的对话列表">
+<img src="docs/w98-sessions.png" width="49%" alt="98：展开后的对话列表">
 
 快捷键：`/` 搜索、`Ctrl+A` 全选、`Ctrl+Enter` 恢复、`Esc` 取消搜索或高亮。
 
-左栏设置区能改默认时间范围、终端窗口行为（复用当前窗口 / 强制新窗口）、排除规则；改完点「保存设置」落到 `settings.json`。
+顶栏右侧的四格方块按钮一键换皮肤，左栏「外观主题」下拉是同一个设置，改完立即生效并落盘。
+
+左栏设置区能改默认时间范围、外观主题、终端窗口行为（复用当前窗口 / 强制新窗口）、排除规则；改完点「保存设置」落到 `settings.json`。
 
 <img src="docs/settings.png" width="880" alt="设置区与环境自检">
 
@@ -122,6 +136,27 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 清洗规则有两个：标题首字符是 `<` 的跳过（那是 `system-reminder` 之类的注入块，不是人写的）；
 按**码点**截断而不是按字节，否则会把汉字切成半个乱码。
 
+## 主题是怎么组织的
+
+`style.css` 只写结构（栅格、尺寸、层级），造型全在皮肤里：
+
+- `style.css` 顶部的 `:root` 就是霓虹主题的变量表
+- `theme-win98.css` 用 `html[data-skin="win98"]` 前缀成组覆盖，原始规则一条没改
+
+98 那套九成的立体感来自下面两个变量，文件里反复引用：
+
+```css
+--raise:  inset -1px -1px #0a0a0a, inset 1px 1px #ffffff, inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+--sunken: inset -1px -1px #ffffff, inset 1px 1px #0a0a0a, inset -2px -2px #dfdfdf, inset 2px 2px #808080;
+```
+
+记住方向就够：**凸起是左上亮、右下暗，凹陷反过来**，中间夹一圈过渡灰。按钮、输入框、
+分组框、滚动条滑块、勾选框全是这两条的组合。分组框那种「刻进去一道」的凹刻是
+`inset 1px 1px 暗 + inset -1px -1px 亮`，方向与凸起相反。
+
+加第三套皮肤不用碰 `style.css`：新建 `theme-xxx.css`，规则都用 `html[data-skin="xxx"]` 开头，
+再往 `app.js` 的 `SKINS` 里加个名字即可。
+
 ## 实现上踩到的坑
 
 **`bind_to_port` 之后必须用 `listen_after_bind`。** cpp-httplib 里 `listen(host, port)` 内部会
@@ -138,8 +173,13 @@ WebView2 一路重试到 60 秒超时才放弃，页面一片空白。换成 `li
 **参数转义要按 `CommandLineToArgvW` 的规则来。** 路径带空格时给参数加引号，
 引号前面的反斜杠要成对翻倍，不然 Powershell 收到的是半个参数。
 
-**深色主题要顺手改窗口底色。** Win32 窗口的 `hbrBackground` 原本是浅灰，WebView2 首帧之前会
-先画这块底色，深色界面启动时会闪一下白。改成 `RGB(5, 2, 11)` 之后就没有了。
+**换皮肤要连窗口底色一起换。** Win32 窗口的 `hbrBackground` 在 WebView2 首帧之前就已经画上去了，
+底色不对启动会闪一下。所以 `main.cpp` 先问后端当前主题，霓虹用 `RGB(5, 2, 11)`、
+98 用 `RGB(192, 192, 192)`。
+
+**首帧还会闪一下另一套皮肤。** 主题的真相在 `settings.json`，要等一次网络往返才知道，
+所以设置之前页面就已经按默认主题画出来了。解法是在 `<head>` 里用 `localStorage` 存一份上次的值
+先摆上 `data-skin`，拿到设置后再纠正——只为一帧，但每次启动都看得到。
 
 ## 图标
 

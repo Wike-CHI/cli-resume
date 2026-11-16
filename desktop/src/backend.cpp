@@ -40,6 +40,7 @@ json defaultSettings() {
       {"openTwo", false},
       {"useContinue", false},
       {"window", 0},
+      {"theme", "neon"},  // "neon"（80s CRT）| "win98"
       {"exclude", json::array({"\\temp\\", "\\system32", "\\node_modules\\", "\\appdata\\local\\temp"})},
   };
 }
@@ -78,6 +79,11 @@ void Backend::saveSettings(const json& s) const {
   std::ofstream f(utf8ToWide(settingsPath_), std::ios::binary | std::ios::trunc);
   if (!f) return;
   f << dumpJson(s);
+}
+
+// 宿主在创建窗口时就要知道底色，否则深色主题启动会闪一块浅色
+std::string Backend::theme() const {
+  return jstr(loadSettings(), "theme", "neon");
 }
 
 json Backend::scanCached(int maxAgeHours, bool force) {

@@ -6,6 +6,17 @@
 <title>CLI Resume</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="theme-win98.css">
+<script>
+// 主题的真相存在 settings.json 里，但要等一次网络往返才知道；
+// 先在 head 里用上次的值把 data-skin 摆好，否则每次启动都会先画一帧紫黑再跳成灰。
+(function () {
+  try {
+    var t = localStorage.getItem('cli-resume-theme');
+    if (t === 'win98' || t === 'neon') document.documentElement.dataset.skin = t;
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+})();
+</script>
 </head>
 <body>
 <div class="crt">
@@ -37,6 +48,12 @@
         <input id="search" type="text" placeholder="搜索目录或对话标题" spellcheck="false">
         <span class="kbd">/</span>
       </div>
+      <button id="theme-btn" class="icon-btn" title="切换外观主题">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <rect x="3" y="4" width="8" height="7"/><rect x="13" y="4" width="8" height="7" opacity=".4"/>
+          <rect x="3" y="13" width="8" height="7" opacity=".4"/><rect x="13" y="13" width="8" height="7"/>
+        </svg>
+      </button>
       <button id="refresh" class="icon-btn" title="重新扫描">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="square">
@@ -79,6 +96,13 @@
             <option value="168">最近 7 天</option>
             <option value="720">最近 30 天</option>
             <option value="0">全部</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>外观主题</label>
+          <select id="set-theme">
+            <option value="neon">80s 霓虹 CRT</option>
+            <option value="win98">Windows 98</option>
           </select>
         </div>
         <div class="field">

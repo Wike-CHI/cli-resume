@@ -9,6 +9,10 @@
     new URLSearchParams(location.search).has('demo');
   if (!on) return;
 
+  // #demo&skin=win98 可以直接用某套皮肤进入示例，截图脚本靠它省掉一次点击
+  const skinHit = /skin=([a-z0-9]+)/i.exec(location.hash);
+  const skin = skinHit ? skinHit[1] : 'neon';
+
   const MIN = 60e3;
   const HOUR = 60 * MIN;
   const now = Date.now();
@@ -141,6 +145,7 @@
       openTwo: false,
       useContinue: false,
       window: 0,
+      theme: skin,
       exclude: [],
     },
   };

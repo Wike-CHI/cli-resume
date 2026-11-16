@@ -16,6 +16,7 @@ class Backend {
   void stop();
   int port() const { return port_; }
   std::string url() const;
+  std::string theme() const;  // 当前外观主题，决定窗口底色
 
  private:
   void setupRoutes();

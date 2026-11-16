@@ -1,0 +1,836 @@
+/* ------------------------------------------------------------------
+   CLI//RESUME — Windows 98 皮肤
+   ------------------------------------------------------------------
+   style.css 负责结构（顶栏 / 左栏 / 主屏 / 操作台，尺寸与栅格），
+   这个文件只负责「长什么样」。切换靠 <html data-skin="win98">。
+
+   98 的造型语言只有两句话，理解了就不用一条条记：
+
+   1. 所有立体感都是四层 1px 线，没有模糊阴影：
+      凸起 = 外黑 + 内白 + 内灰 + 外层亮灰；凹陷就是反过来。
+      也就是下面这两个变量，全文件反复用。
+   2. 没有圆角、没有渐变（标题栏除外）、没有发光、没有半透明。
+
+   凹刻的边框（分组框那种「刻进去一道」的效果）用的是
+   inset 1px 1px 暗 + inset -1px -1px 亮，方向正好与凸起相反。
+------------------------------------------------------------------ */
+
+html[data-skin="win98"] {
+  /* 四层立体线的两个基元 */
+  --raise:
+    inset -1px -1px #0a0a0a,
+    inset 1px 1px #ffffff,
+    inset -2px -2px #808080,
+    inset 2px 2px #dfdfdf;
+  --sunken:
+    inset -1px -1px #ffffff,
+    inset 1px 1px #0a0a0a,
+    inset -2px -2px #dfdfdf,
+    inset 2px 2px #808080;
+
+  --face: #c0c0c0;
+  --face-hi: #dfdfdf;
+  --face-lo: #808080;
+  --navy: #000080;
+
+  --void: #008080;
+  --ink: #c0c0c0;
+  --panel: #c0c0c0;
+  --panel-hi: #dfdfdf;
+
+  --line: #808080;
+  --line-soft: #a8a8a8;
+  --line-hot: #000080;
+
+  /* 原来那五个霓虹色在这里只当作语义色：主色深蓝、警示酒红、成功墨绿 */
+  --cyan: #000080;
+  --magenta: #800000;
+  --violet: #400080;
+  --amber: #808000;
+  --lime: #008000;
+
+  --text: #000000;
+  --muted: #404040;
+  --faint: #666666;
+
+  /* 英文走 Tahoma，中文走宋体：12px 的宋体还是点阵渲染，就是那个年代的字 */
+  --ui: "Tahoma", "MS Sans Serif", "SimSun", "Microsoft YaHei UI", sans-serif;
+  --mono: "Fixedsys", "Lucida Console", "Consolas", "SimSun", monospace;
+
+  --glow-cyan: none;
+  --glow-mag: none;
+
+  /* 切角是 80 年代那套的符号，98 全是直角 */
+  --cut: none;
+  --cut-sm: none;
+}
+
+/* ---------------- 机身 ---------------- */
+
+html[data-skin="win98"] body {
+  background: #008080;
+  font-size: 12px;
+}
+
+html[data-skin="win98"] .crt {
+  background: #c0c0c0;
+}
+
+/* 扫描线、滚动光带、暗角、透视网格，全是 CRT 的东西 */
+html[data-skin="win98"] .crt::before,
+html[data-skin="win98"] .crt::after,
+html[data-skin="win98"] .crt-lines,
+html[data-skin="win98"] .crt-roll {
+  display: none;
+}
+
+/* ---------------- 顶栏：做成菜单栏 ---------------- */
+
+html[data-skin="win98"] .topbar {
+  gap: 14px;
+  padding: 3px 7px;
+  background: #c0c0c0;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 #808080, inset 0 -2px 0 #ffffff;
+}
+html[data-skin="win98"] .topbar::after { display: none; }
+
+html[data-skin="win98"] .logo {
+  width: 22px;
+  height: 22px;
+  color: #000080;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="win98"] .logo svg { width: 15px; height: 15px; }
+
+html[data-skin="win98"] .brand-text h1 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="win98"] .brand-text h1 i {
+  color: #000080;
+  text-shadow: none;
+  padding: 0;
+}
+/* 窗口标题栏里已经有「终端现场」，菜单栏不重复 */
+html[data-skin="win98"] .brand-text p { display: none; }
+
+html[data-skin="win98"] .status {
+  /* 1fr 列默认拉伸，会变成横贯顶栏的一条灰带；98 里状态灯就一小块 */
+  justify-self: center;
+  gap: 7px;
+  padding: 2px 10px;
+  background: #c0c0c0;
+  box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+}
+
+/* 98 的指示灯是方的，而且不呼吸，硬闪 */
+html[data-skin="win98"] .lamp {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  box-shadow: none !important;
+  border: 1px solid #404040;
+}
+html[data-skin="win98"] .lamp.pwr { background: #00a000; }
+html[data-skin="win98"] .lamp.act {
+  background: #c00000;
+  animation: w98-blink 1.4s steps(1) infinite;
+}
+@keyframes w98-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .2; }
+}
+
+html[data-skin="win98"] .clock {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+
+/* ---------------- 搜索框与按钮 ---------------- */
+
+html[data-skin="win98"] .search {
+  height: 22px;
+  gap: 4px;
+  padding: 0 4px 0 5px;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="win98"] .search .prompt {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #808080;
+  text-shadow: none;
+}
+html[data-skin="win98"] .search input {
+  width: 176px;
+  font-family: var(--ui);
+  font-size: 12px;
+  color: #000;
+  letter-spacing: 0;
+}
+html[data-skin="win98"] .search input::placeholder { color: #808080; }
+html[data-skin="win98"] .search:focus-within { box-shadow: var(--sunken); }
+
+html[data-skin="win98"] .kbd {
+  border: 0;
+  padding: 0 3px;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+html[data-skin="win98"] .icon-btn {
+  width: 23px;
+  height: 22px;
+  background: #c0c0c0;
+  border: 0;
+  box-shadow: var(--raise);
+  color: #000;
+  clip-path: none;
+}
+html[data-skin="win98"] .icon-btn:hover {
+  background: #c0c0c0;
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .icon-btn:active {
+  transform: none;
+  box-shadow: var(--sunken);
+  padding: 1px 0 0 1px;
+}
+
+/* ---------------- 左栏 ---------------- */
+
+html[data-skin="win98"] .body { grid-template-columns: 238px 1fr; }
+
+html[data-skin="win98"] .rail {
+  gap: 7px;
+  padding: 6px 6px 4px;
+  background: #c0c0c0;
+  border-right: 0;
+  /* 右边缘刻一道：左边亮、右边暗 */
+  box-shadow: inset -1px 0 0 #808080, inset -2px 0 0 #ffffff;
+  backdrop-filter: none;
+}
+
+html[data-skin="win98"] .rail-hd {
+  padding: 1px 2px 0;
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="win98"] .rail-hd i {
+  height: 2px;
+  background: #808080;
+  box-shadow: 0 1px 0 #ffffff;
+}
+
+/* 分组框：上左暗、下右亮，刻进去一道 */
+html[data-skin="win98"] .rail-sec {
+  gap: 5px;
+  padding: 5px 6px 7px;
+  background: #c0c0c0;
+  box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+}
+html[data-skin="win98"] .rail-sec h3 {
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #000;
+}
+
+/* 时间范围：98 的单选组，圈是凹陷的白圆，选中填一个蓝点 */
+html[data-skin="win98"] .seg { gap: 1px; }
+html[data-skin="win98"] .seg button {
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 2px 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0;
+  clip-path: none;
+}
+html[data-skin="win98"] .seg button::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: inset -1px -1px #ffffff, inset 1px 1px #808080, inset -2px -2px #dfdfdf, inset 2px 2px #404040;
+}
+html[data-skin="win98"] .seg button:hover { color: #000; border: 0; }
+html[data-skin="win98"] .seg button em {
+  margin-left: auto;
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #666;
+}
+html[data-skin="win98"] .seg button.on {
+  color: #000;
+  font-weight: 700;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+}
+html[data-skin="win98"] .seg button.on::before {
+  background: radial-gradient(circle at 50% 50%, #000080 0 2.5px, #ffffff 2.6px);
+}
+html[data-skin="win98"] .seg button.on em { color: #000080; }
+
+/* 设置区高亮：98 没有光，用一圈深蓝表示「现在是它」 */
+html[data-skin="win98"] .rail-sec#drawer {
+  padding: 5px 6px 7px;
+  border: 0;
+  clip-path: none;
+}
+html[data-skin="win98"] .rail-sec#drawer.on {
+  background: #c0c0c0;
+  box-shadow:
+    inset 1px 1px #808080,
+    inset -1px -1px #ffffff,
+    0 0 0 1px #000080;
+}
+
+html[data-skin="win98"] .mini-x {
+  font-family: var(--ui);
+  font-size: 11px;
+  line-height: 1;
+  color: #000;
+  padding: 0 3px;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .mini-x:hover { color: #000; }
+
+html[data-skin="win98"] .field { gap: 3px; }
+html[data-skin="win98"] .field > label {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: #000;
+}
+html[data-skin="win98"] .field .hint { color: #666; font-size: 10px; }
+
+html[data-skin="win98"] .field select,
+html[data-skin="win98"] .field textarea {
+  border: 0;
+  padding: 2px 3px;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+}
+html[data-skin="win98"] .field textarea {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+/* 左栏太窄，用 12px 滚动条而不是 16px，否则挤掉一行字 */
+html[data-skin="win98"] .field textarea::-webkit-scrollbar { width: 12px; }
+html[data-skin="win98"] .field textarea::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ffffff 0% 25%, #c0c0c0 0% 50%) 0 0 / 2px 2px;
+}
+html[data-skin="win98"] .field textarea::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .field select:focus,
+html[data-skin="win98"] .field textarea:focus {
+  border: 0;
+  box-shadow: var(--sunken);
+  outline: 1px dotted #000;
+  outline-offset: -3px;
+}
+
+/* 环境自检 */
+html[data-skin="win98"] .doctor { gap: 4px; }
+html[data-skin="win98"] .doc-row {
+  font-size: 10px;
+  line-height: 1.45;
+  color: #000;
+}
+html[data-skin="win98"] .doc-row .mark.ok { color: #008000; text-shadow: none; }
+html[data-skin="win98"] .doc-row .mark.bad { color: #c00000; text-shadow: none; }
+html[data-skin="win98"] .doc-row span.txt {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: #333;
+  line-height: 1.45;
+}
+
+html[data-skin="win98"] .rail-foot {
+  padding: 5px 2px 3px;
+  border-top: 0;
+  background: transparent;
+  box-shadow: inset 0 1px 0 #808080, inset 0 2px 0 #ffffff;
+  font-family: var(--ui);
+  font-size: 9.5px;
+  letter-spacing: 0;
+  color: #555;
+}
+html[data-skin="win98"] .rail-foot b {
+  color: #000;
+  font-weight: 700;
+}
+
+/* ---------------- 主屏幕：白色凹陷的列表视图 ---------------- */
+
+html[data-skin="win98"] .screen {
+  background: #c0c0c0;
+}
+
+/* 列标题条 */
+html[data-skin="win98"] .screen-hd {
+  height: 21px;
+  padding: 0 6px;
+  border-bottom: 0;
+  background: #c0c0c0;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -1px 0 #808080;
+}
+html[data-skin="win98"] .screen-hd::after { display: none; }
+html[data-skin="win98"] .screen-hd .cmd {
+  /* 这一行本来就是命令，用等宽更像在控制台里 */
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+}
+html[data-skin="win98"] .screen-hd .meta {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+  opacity: 1;
+}
+
+html[data-skin="win98"] .list {
+  gap: 0;
+  margin: 3px 3px 3px 4px;
+  /* 右边多留一点：卡片上的按钮不该贴着滚动条 */
+  padding: 2px 5px 2px 2px;
+  background: #ffffff;
+  background-image: none;
+  box-shadow: var(--sunken);
+}
+
+/* 滚动条：98 的 16px 灰槽 + 点阵底纹 + 凸起滑块 */
+html[data-skin="win98"] .rail::-webkit-scrollbar,
+html[data-skin="win98"] .list::-webkit-scrollbar { width: 16px; height: 16px; }
+html[data-skin="win98"] .rail::-webkit-scrollbar-track,
+html[data-skin="win98"] .list::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ffffff 0% 25%, #c0c0c0 0% 50%) 0 0 / 2px 2px;
+}
+html[data-skin="win98"] .rail::-webkit-scrollbar-thumb,
+html[data-skin="win98"] .list::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .rail::-webkit-scrollbar-thumb:hover,
+html[data-skin="win98"] .list::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
+
+/* ---------------- 目录条目 ---------------- */
+
+html[data-skin="win98"] .ws-card {
+  gap: 7px;
+  padding: 3px 6px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  clip-path: none;
+  color: #000;
+}
+html[data-skin="win98"] .ws-card::before { display: none; }
+
+html[data-skin="win98"] .ws-card:hover { background: #e4e4f4; box-shadow: none; }
+html[data-skin="win98"] .ws-card.sel { background: #000080; box-shadow: none; }
+
+html[data-skin="win98"] .ws-no {
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #808080;
+  padding: 0;
+  border: 0;
+}
+html[data-skin="win98"] .ws-card:hover .ws-no { color: #808080; border: 0; }
+html[data-skin="win98"] .ws-card.sel .ws-no { color: #b0b0e0; border: 0; }
+
+/* 勾选框：白底凹陷的小方块，勾是黑的 */
+html[data-skin="win98"] .ws-check,
+html[data-skin="win98"] .sel-all input,
+html[data-skin="win98"] .chip-opt input {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+}
+html[data-skin="win98"] .ws-check:hover,
+html[data-skin="win98"] .sel-all input:hover,
+html[data-skin="win98"] .chip-opt input:hover {
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="win98"] .ws-check:checked,
+html[data-skin="win98"] .sel-all input:checked,
+html[data-skin="win98"] .chip-opt input:checked {
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="win98"] .ws-check:checked::after,
+html[data-skin="win98"] .sel-all input:checked::after,
+html[data-skin="win98"] .chip-opt input:checked::after {
+  width: 3px;
+  height: 6px;
+  border: solid #000;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -2px);
+}
+html[data-skin="win98"] .sel-all input:indeterminate {
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="win98"] .sel-all input:indeterminate::after { background: #000; }
+
+html[data-skin="win98"] .ws-name {
+  font-family: var(--ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="win98"] .ws-card.sel .ws-name { color: #ffffff; }
+
+html[data-skin="win98"] .ws-path {
+  font-family: var(--ui);
+  font-size: 11px;
+  color: #666;
+}
+html[data-skin="win98"] .ws-card.sel .ws-path { color: #c0c0f0; }
+
+html[data-skin="win98"] .ws-sub {
+  margin-top: 2px;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #444;
+}
+html[data-skin="win98"] .ws-card.sel .ws-sub { color: #d8d8ff; }
+
+html[data-skin="win98"] .tool-chip {
+  gap: 3px;
+  padding: 0 4px;
+  background: #c0c0c0;
+  border: 0;
+  box-shadow: var(--raise);
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+  color: #000;
+  opacity: 1;
+}
+html[data-skin="win98"] .tool-chip i { width: 5px; height: 5px; }
+html[data-skin="win98"] .tool-chip.cb { color: #000080; }
+html[data-skin="win98"] .tool-chip.cl { color: #800000; }
+html[data-skin="win98"] .ws-card.sel .tool-chip,
+html[data-skin="win98"] .ws-card.sel .tool-chip.cb,
+html[data-skin="win98"] .ws-card.sel .tool-chip.cl { color: #000; }
+
+html[data-skin="win98"] .dot-sep { color: #a0a0a0; }
+html[data-skin="win98"] .ws-card.sel .dot-sep { color: #8080c0; }
+html[data-skin="win98"] .ws-when { color: #444; }
+html[data-skin="win98"] .ws-card.sel .ws-when { color: #d8d8ff; }
+html[data-skin="win98"] .ws-count { color: #666; }
+html[data-skin="win98"] .ws-card.sel .ws-count { color: #c0c0f0; }
+html[data-skin="win98"] .ws-latest { color: #666; font-size: 10.5px; }
+html[data-skin="win98"] .ws-card.sel .ws-latest { color: #c0c0f0; }
+
+html[data-skin="win98"] .mini-btn {
+  height: 19px;
+  padding: 0 6px;
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  opacity: 1;
+}
+html[data-skin="win98"] .ws-card:hover .mini-btn { opacity: 1; }
+html[data-skin="win98"] .mini-btn:hover {
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .mini-btn:active { box-shadow: var(--sunken); }
+html[data-skin="win98"] .mini-btn.go {
+  color: #000;
+  font-weight: 700;
+  border: 0;
+  opacity: 1;
+}
+html[data-skin="win98"] .mini-btn.go:hover {
+  background: #c0c0c0;
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .mini-btn.go:active { box-shadow: var(--sunken); }
+
+/* 展开箭头：换回树形控件的 +/− 小方块。
+   十字用两层背景渐变画，靠 center 对齐，比绝对定位的伪元素稳。 */
+html[data-skin="win98"] .caret {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: 0;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(#000, #000),
+    linear-gradient(#000, #000);
+  background-size: 5px 1px, 1px 5px;
+  background-position: center, center;
+  background-repeat: no-repeat;
+  box-shadow: inset -1px -1px #ffffff, inset 1px 1px #808080, inset -2px -2px #dfdfdf, inset 2px 2px #404040;
+}
+html[data-skin="win98"] .ws-card:hover .caret { border: 0; }
+html[data-skin="win98"] .ws-item.open .caret {
+  transform: none;
+  border: 0;
+  /* 展开后只剩横线，就是减号 */
+  background-image: linear-gradient(#000, #000);
+  background-size: 5px 1px;
+}
+
+/* ---------------- 展开后的对话列表 ---------------- */
+
+html[data-skin="win98"] .sess-panel {
+  margin: 2px 0 3px 22px;
+  padding: 0 0 2px;
+  border-left: 1px dotted #808080;
+  background: transparent;
+}
+
+html[data-skin="win98"] .sess-row {
+  gap: 6px;
+  padding: 2px 6px;
+  border-bottom: 0;
+  font-size: 11.5px;
+  color: #000;
+}
+html[data-skin="win98"] .sess-row:hover {
+  background: #000080;
+  color: #ffffff;
+  box-shadow: none;
+}
+html[data-skin="win98"] .sess-row:hover .sess-when { color: #c0c0f0; }
+html[data-skin="win98"] .sess-row:hover .sess-go { color: #ffffff; }
+
+html[data-skin="win98"] .tool-dot {
+  width: 7px;
+  height: 7px;
+  transform: none;
+  border: 0;
+  box-shadow: none;
+}
+html[data-skin="win98"] .tool-dot.cb { background: #000080; }
+html[data-skin="win98"] .tool-dot.cl { background: #800000; }
+html[data-skin="win98"] .sess-row:hover .tool-dot.cb,
+html[data-skin="win98"] .sess-row:hover .tool-dot.cl { background: #ffffff; }
+
+html[data-skin="win98"] .sess-when {
+  font-family: var(--ui);
+  font-size: 10.5px;
+  color: #666;
+}
+
+/* 98 里「进入」更像一个链接：深蓝带下划线 */
+html[data-skin="win98"] .sess-go {
+  padding: 0;
+  border: 0;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000080;
+  text-decoration: underline;
+  opacity: 1;
+}
+html[data-skin="win98"] .sess-row:hover .sess-go { box-shadow: none; }
+
+html[data-skin="win98"] .more-btn {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000080;
+  text-decoration: underline;
+  padding: 1px 0;
+}
+html[data-skin="win98"] .more-btn:hover { color: #000080; text-shadow: none; }
+
+/* ---------------- 空态与骨架 ---------------- */
+
+html[data-skin="win98"] .empty {
+  max-width: 380px;
+  padding: 12px 14px;
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+  clip-path: none;
+  font-family: var(--ui);
+  color: #000;
+}
+html[data-skin="win98"] .empty h3 {
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="win98"] .empty p { font-size: 11.5px; line-height: 1.7; }
+html[data-skin="win98"] .empty code {
+  font-family: var(--mono);
+  color: #000;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  padding: 0 3px;
+}
+
+html[data-skin="win98"] .skeleton {
+  height: 42px;
+  margin: 2px;
+  border: 0;
+  background: #e8e8e8;
+  clip-path: none;
+  animation: none;
+}
+
+/* ---------------- 操作台 ---------------- */
+
+html[data-skin="win98"] .deck {
+  gap: 10px;
+  padding: 5px 8px;
+  background: #c0c0c0;
+  border-top: 0;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 2px 0 #dfdfdf, inset 0 -1px 0 #808080;
+}
+
+html[data-skin="win98"] .sel-all,
+html[data-skin="win98"] .chip-opt {
+  gap: 5px;
+  font-size: 11.5px;
+  color: #000;
+  letter-spacing: 0;
+}
+html[data-skin="win98"] .opts { gap: 12px; }
+
+html[data-skin="win98"] .primary {
+  height: 23px;
+  padding: 0 12px;
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  clip-path: none;
+}
+html[data-skin="win98"] .primary:hover:not(:disabled) {
+  filter: none;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .primary:active:not(:disabled) {
+  transform: none;
+  box-shadow: var(--sunken);
+  padding: 1px 11px 0 13px;
+}
+/* 98 的默认按钮：外面再套一圈黑框 */
+html[data-skin="win98"] .primary:not(:disabled) { outline: 1px solid #000; outline-offset: 1px; }
+html[data-skin="win98"] .primary:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+html[data-skin="win98"] .primary:disabled {
+  background: #c0c0c0;
+  border: 0;
+  color: #808080;
+  box-shadow: var(--raise);
+  /* 禁用的文字右下打一层白，是 98 的标志性做法 */
+  text-shadow: 1px 1px 0 #ffffff;
+  cursor: default;
+}
+html[data-skin="win98"] .primary.small {
+  height: 21px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  background: #c0c0c0;
+  color: #000;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .primary.small:hover:not(:disabled) {
+  background: #c0c0c0;
+  color: #000;
+  box-shadow: var(--raise);
+}
+
+/* ---------------- toast：做成消息框 ---------------- */
+
+html[data-skin="win98"] .toast {
+  bottom: 46px;
+  max-width: 62vw;
+  padding: 8px 14px;
+  background: #c0c0c0;
+  border: 0;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0;
+  clip-path: none;
+}
+html[data-skin="win98"] .toast.err {
+  border: 0;
+  color: #000;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+}
+
+html[data-skin="win98"] .icon-btn.spin svg { animation: spin .7s steps(8) infinite; }
+
+/* 窄屏时左栏收起，和霓虹皮肤一致；这里只是把栅格宽度对齐 */
+@media (max-width: 940px) {
+  html[data-skin="win98"] .body { grid-template-columns: 210px 1fr; }
+}

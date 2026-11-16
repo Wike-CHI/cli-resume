@@ -5,9 +5,12 @@
 不维护项目清单、不记笔记、不用手动 `cd` —— 直接读两个 CLI 自己落的会话历史，
 还原出「上次在哪些目录干活、会话 id 是多少」，然后用 Windows Terminal 多标签 `--resume` 回去。
 
-<img src="desktop/docs/desktop.png" width="880" alt="桌面端界面">
+<img src="desktop/docs/desktop.png" width="49%" alt="80s 霓虹皮肤">
+<img src="desktop/docs/w98-desktop.png" width="49%" alt="Windows 98 皮肤">
 
-桌面端是 80 年代合成器浪潮那套界面语言：紫黑底、青与品红双霓虹、CRT 扫描线与底部网格地平线。
+桌面端有两套皮肤，顶栏一个按钮切换：80 年代合成器浪潮（紫黑底、青与品红双霓虹、CRT 扫描线、
+网格地平线）和 Windows 98（灰面板、四层 1px 立体线、深蓝选中、宋体小字、16px 经典滚动条）。
+选择记在 `settings.json` 里，下次启动就是上次那套。
 
 ## 两种形态，同一套思路
 
