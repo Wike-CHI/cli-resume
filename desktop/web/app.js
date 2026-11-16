@@ -184,8 +184,9 @@ function sessionRowHtml(ws, s, index) {
     </div>`;
 }
 
-function itemHtml(w) {
+function itemHtml(w, index) {
   const key = w.cwd.toLowerCase();
+  const no = String(index + 1).padStart(2, '0');
   const on = S.sel.has(key);
   const open = S.expanded.has(key);
   const showAll = S.showAll.has(key);
@@ -216,6 +217,7 @@ function itemHtml(w) {
   return `
   <div class="ws-item${open ? ' open' : ''}${showAll ? ' showall' : ''}" data-item="${esc(key)}">
     <div class="ws-card${on ? ' sel' : ''}" data-key="${esc(key)}">
+      <span class="ws-no">${no}</span>
       <input type="checkbox" class="ws-check" ${on ? 'checked' : ''} tabindex="-1">
       <div class="ws-main">
         <div class="ws-title-row">
@@ -251,9 +253,11 @@ function render() {
          <p>先在一个项目目录里跑一次 <code>codebuddy</code> 或 <code>claude</code>，<br>
          再回来点右上角的刷新。</p></div>`;
   } else {
-    listEl.innerHTML = list.map(itemHtml).join('');
+    listEl.innerHTML = list.map((w, i) => itemHtml(w, i)).join('');
   }
   updateBar();
+  // 自检区一直有内容，不用等点设置才填上
+  renderDoctor();
   $('meta').textContent = S.all.length
     ? `${DEMO ? '示例数据 · ' : ''}共 ${S.all.length} 个目录 · ${S.stats.totalSessions || 0} 个对话 · 扫描 ${S.stats.elapsedMs || 0} ms`
     : '';
@@ -503,21 +507,27 @@ async function saveSettings(patch) {
   }
 }
 
-// ---------------- 设置抽屉 ----------------
+// ---------------- 设置（左栏常驻） ----------------
+// 设置不再是右侧抽屉，改成左栏里的常驻区块；点顶栏的滑杆只是高亮一下，
+// 常量显示意味着随时能看到排除规则和环境自检，不用先打开一层。
 
 function openDrawer() {
-  $('drawer').classList.add('on');
-  $('overlay').classList.add('on');
+  const d = $('drawer');
+  d.classList.add('on');
   renderDoctor();
+  // 只在确实看不到的时候才滚，避免点一下就把上面的时间范围挤出视野
+  const box = d.getBoundingClientRect();
+  const rail = d.parentElement.getBoundingClientRect();
+  if (box.top < rail.top || box.bottom > rail.bottom) {
+    d.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 function closeDrawer() {
   $('drawer').classList.remove('on');
-  $('overlay').classList.remove('on');
 }
 
 $('settings-btn').addEventListener('click', openDrawer);
 $('drawer-close').addEventListener('click', closeDrawer);
-$('overlay').addEventListener('click', closeDrawer);
 
 $('set-save').addEventListener('click', async () => {
   const exclude = $('set-exclude').value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -572,6 +582,16 @@ document.addEventListener('keydown', (e) => {
     render();
   }
 });
+
+// ---------------- 顶栏时钟 ----------------
+
+function tickClock() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  $('clock').textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+tickClock();
+setInterval(tickClock, 1000);
 
 // 启动
 load(false);

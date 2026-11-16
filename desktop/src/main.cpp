@@ -216,7 +216,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   wc.hIconSm = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON,
                                  GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
                                  LR_SHARED);
-  wc.hbrBackground = CreateSolidBrush(RGB(246, 247, 249));
+  // 底色跟 CRT 主题的紫黑一致，否则 WebView2 首帧之前会闪一块白
+  wc.hbrBackground = CreateSolidBrush(RGB(5, 2, 11));
   wc.lpszClassName = kClassName;
   RegisterClassExW(&wc);
 

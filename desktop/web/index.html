@@ -8,115 +8,140 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
+<div class="crt">
 
   <header class="topbar">
     <div class="brand">
-      <div class="logo">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7l4 5-4 5"/><path d="M12 17h8"/>
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <rect x="3" y="6" width="3" height="3"/><rect x="6" y="9" width="3" height="3"/>
+          <rect x="6" y="12" width="3" height="3"/><rect x="3" y="15" width="3" height="3"/>
+          <rect x="12" y="15" width="8" height="3"/>
         </svg>
       </div>
       <div class="brand-text">
-        <h1>CLI Resume</h1>
-        <p>重启后，把上次的终端现场拉回来</p>
+        <h1>CLI<i>//</i>RESUME</h1>
+        <p>RESTORE TERMINAL SESSION</p>
       </div>
+    </div>
+
+    <div class="status">
+      <span class="lamp pwr" title="电源"></span>
+      <span class="lamp act" title="扫描中"></span>
+      <span class="clock" id="clock">--:--:--</span>
     </div>
 
     <div class="top-actions">
       <div class="search">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="search" type="text" placeholder="搜索目录（/ 聚焦）" spellcheck="false">
+        <span class="prompt">&gt;</span>
+        <input id="search" type="text" placeholder="搜索目录或对话标题" spellcheck="false">
+        <span class="kbd">/</span>
       </div>
       <button id="refresh" class="icon-btn" title="重新扫描">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="square">
+          <path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>
         </svg>
       </button>
-      <button id="settings-btn" class="icon-btn" title="设置">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
-             stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a1.7 1.7 0 0 0-1.6-1H1.3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 3 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 3a1.7 1.7 0 0 0 1-1.6V1.3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 3a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.2.9z"/>
+      <button id="settings-btn" class="icon-btn" title="跳到设置">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="square">
+          <path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h9M17 17h3"/>
+          <rect x="14" y="5" width="3" height="4"/><rect x="8" y="10" width="3" height="4"/>
+          <rect x="13" y="15" width="3" height="4"/>
         </svg>
       </button>
     </div>
   </header>
 
-  <div class="toolbar">
-    <div class="seg" id="range">
-      <button data-range="1">今天</button>
-      <button data-range="168">7 天</button>
-      <button data-range="720" class="on">30 天</button>
-      <button data-range="0">全部</button>
-    </div>
-    <div class="meta" id="meta"></div>
+  <div class="body">
+
+    <aside class="rail">
+      <div class="rail-hd"><span>CONTROL</span><i></i></div>
+
+      <section class="rail-sec">
+        <h3>RANGE</h3>
+        <div class="seg" id="range">
+          <button data-range="1"><span>今天</span><em>1D</em></button>
+          <button data-range="168"><span>7 天</span><em>7D</em></button>
+          <button data-range="720" class="on"><span>30 天</span><em>30D</em></button>
+          <button data-range="0"><span>全部</span><em>ALL</em></button>
+        </div>
+      </section>
+
+      <section class="rail-sec" id="drawer">
+        <h3>SETTINGS<a id="drawer-close" class="mini-x" title="取消高亮">×</a></h3>
+
+        <div class="field">
+          <label>默认时间范围</label>
+          <select id="set-range">
+            <option value="1">今天</option>
+            <option value="168">最近 7 天</option>
+            <option value="720">最近 30 天</option>
+            <option value="0">全部</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>终端窗口</label>
+          <select id="set-window">
+            <option value="0">当前窗口开新标签页</option>
+            <option value="-1">新开一个窗口</option>
+            <option value="1">窗口 1</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>排除规则 <span class="hint">一行一个</span></label>
+          <textarea id="set-exclude" rows="3" spellcheck="false" placeholder="\node_modules\&#10;\Temp\\"></textarea>
+        </div>
+        <button id="set-save" class="primary small">保存设置</button>
+      </section>
+
+      <section class="rail-sec">
+        <h3>DIAGNOSTIC</h3>
+        <div id="doctor" class="doctor"></div>
+      </section>
+
+      <div class="rail-foot">
+        <span><b>/</b> 搜索</span>
+        <span><b>^A</b> 全选</span>
+        <span><b>^ENT</b> 恢复</span>
+        <span><b>ESC</b> 取消</span>
+      </div>
+    </aside>
+
+    <main class="screen">
+      <div class="screen-hd">
+        <span class="cmd">C:\&gt; cli-resume --scan</span>
+        <span class="meta" id="meta"></span>
+      </div>
+
+      <div id="list" class="list"></div>
+
+      <footer class="deck">
+        <label class="sel-all">
+          <input type="checkbox" id="sel-all">
+          <span id="sel-label">全选</span>
+        </label>
+        <div class="opts">
+          <label class="chip-opt"><input type="checkbox" id="opt-two"><span>同目录两个 CLI 各进一个</span></label>
+          <label class="chip-opt"><input type="checkbox" id="opt-cont"><span>用 -c 续接最近会话</span></label>
+        </div>
+        <button id="open-btn" class="primary" disabled>
+          <span id="open-text">进入对话</span>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+            <rect x="4" y="11" width="12" height="2"/><rect x="14" y="7" width="2" height="3"/>
+            <rect x="16" y="9" width="2" height="2"/><rect x="16" y="13" width="2" height="2"/>
+            <rect x="14" y="14" width="2" height="3"/>
+          </svg>
+        </button>
+      </footer>
+    </main>
+
   </div>
 
-  <main id="list" class="list"></main>
-
-  <footer class="actionbar">
-    <label class="sel-all">
-      <input type="checkbox" id="sel-all">
-      <span id="sel-label">全选</span>
-    </label>
-    <div class="opts">
-      <label class="chip-opt"><input type="checkbox" id="opt-two"><span>同目录两个 CLI 各进一个</span></label>
-      <label class="chip-opt"><input type="checkbox" id="opt-cont"><span>用 -c 续接最近会话</span></label>
-    </div>
-    <button id="open-btn" class="primary" disabled>
-      <span id="open-text">进入对话</span>
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
-           stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-    </button>
-  </footer>
-
+  <div class="crt-lines" aria-hidden="true"></div>
+  <div class="crt-roll" aria-hidden="true"></div>
 </div>
-
-<aside id="drawer" class="drawer" aria-hidden="true">
-  <div class="drawer-head">
-    <h2>设置</h2>
-    <button id="drawer-close" class="icon-btn" title="关闭">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button>
-  </div>
-  <div class="drawer-body">
-    <div class="field">
-      <label>默认时间范围</label>
-      <select id="set-range">
-        <option value="1">今天</option>
-        <option value="168">最近 7 天</option>
-        <option value="720">最近 30 天</option>
-        <option value="0">全部</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>默认终端窗口</label>
-      <select id="set-window">
-        <option value="0">当前窗口开新标签页</option>
-        <option value="-1">新开一个窗口</option>
-        <option value="1">窗口 1</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>排除规则 <span class="hint">路径里含这些词的直接跳过，一行一个</span></label>
-      <textarea id="set-exclude" rows="5" spellcheck="false"></textarea>
-    </div>
-
-    <div class="field">
-      <label>环境自检</label>
-      <div id="doctor" class="doctor"></div>
-    </div>
-  </div>
-  <div class="drawer-foot">
-    <button id="set-save" class="primary small">保存设置</button>
-  </div>
-</aside>
-<div id="overlay" class="overlay"></div>
 
 <div id="toast" class="toast"></div>
 
