@@ -199,6 +199,9 @@ WebView2 一路重试到 60 秒超时才放弃，页面一片空白。换成 `li
 一个窗格一个 `Terminal` 实例，面板里用 CSS grid 排：1 个占满、2 个并排、3~4 个两行两列。
 高度拖 `.term-drag`，收起只是 `flex-basis: 0`，会话还在。
 
+<img src="docs/term.png" width="49%" alt="霓虹：两个终端并排">
+<img src="docs/w98-term.png" width="49%" alt="98：两个终端并排">
+
 ### ConPTY 的坑
 
 **`STARTF_USESTDHANDLES` 必须显式设置，且三个句柄置空。**

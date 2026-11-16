@@ -83,8 +83,8 @@ codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里
 - **回收**：关掉窗格或退出应用，ConPTY 会话连同里面的 node 进程一起结束（子进程挂在 job 上，
   应用被强杀也不留孤儿）
 
-<img src="docs/term.png" width="49%" alt="霓虹：两个终端并排">
-<img src="docs/w98-term.png" width="49%" alt="98：两个终端并排">
+<img src="desktop/docs/term.png" width="49%" alt="霓虹：两个终端并排">
+<img src="desktop/docs/w98-term.png" width="49%" alt="98：两个终端并排">
 
 ## 它怎么知道你在哪些目录干过活
 
