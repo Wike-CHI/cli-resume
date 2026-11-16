@@ -299,6 +299,10 @@ html, body {
   min-height: 0;
   display: grid;
   grid-template-columns: 258px 1fr;
+  /* 显式只留一行、高度就取剩余空间：不写这行的话隐式行高是 auto，
+     内容一多（二十几个目录）整行会被撑到内容全高，溢出部分被 .crt 裁掉，
+     .list / .rail 因为「够高」不触发滚动，看着就是滚动条没了、底部操作栏也消失 */
+  grid-template-rows: 1fr;
 }
 
 .rail {
@@ -486,6 +490,8 @@ html, body {
 
 .screen {
   min-width: 0;
+  /* 和 .rail 一样：网格项默认 min-height:auto 会被内容顶开 */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -547,6 +553,9 @@ html, body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* 先渲染骨架、再整块换成真实条目，浏览器的滚动锚定会把这堆变化当成
+     「内容上移了」而补偿 scrollTop，结果一打开列表就停在第 4 条 */
+  overflow-anchor: none;
   padding: 12px 16px 16px;
   display: flex;
   flex-direction: column;
