@@ -96,7 +96,8 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 - **搜索**：按目录名、完整路径、对话标题过滤，`/` 聚焦
 - **卡片**：序号 + 项目名 + 完整路径 + 用过的 CLI 标签 + 对话数量 + 最后活跃时间 + 最近那条对话的标题
 - **展开**：点卡片任意位置（勾选框除外）展开这个目录下的对话列表，按时间倒序，先显示 6 条
-- **进入**：点对话行（或卡片上的「进入」按钮走最近那条），直接在 Windows Terminal 里 `--resume` 那条会话
+- **进入**：点对话行（或卡片上的「进入」按钮走最近那条），直接在应用内终端里 `--resume` 那条会话；
+  默认走内嵌终端，左栏「进入方式」可以切回外部终端窗口
 - **定位**：在资源管理器里打开这个目录
 
 <img src="docs/sessions.png" width="49%" alt="霓虹：展开后的对话列表">
@@ -181,6 +182,40 @@ WebView2 一路重试到 60 秒超时才放弃，页面一片空白。换成 `li
 所以设置之前页面就已经按默认主题画出来了。解法是在 `<head>` 里用 `localStorage` 存一份上次的值
 先摆上 `data-skin`，拿到设置后再纠正——只为一帧，但每次启动都看得到。
 
+## 内嵌终端
+
+会话不再必须弹外部窗口。`src/terminal.cpp` 用 ConPTY 起一个真 shell，`web/vendor/xterm.js` 负责画，
+中间是一条 WebSocket（`/api/term/ws?id=…`）。二进制帧就是 PTY 的原始字节（两个方向都是），
+文本帧只放控制消息，目前只有一个 `resize`。
+
+流程：
+
+1. `POST /api/term/open` 带 `cwd` / `cmd` / `cols` / `rows` → 后端 `CreatePseudoConsole` + 起 shell，
+   返回会话 id（shell 起来后通过 PTY 把 `cmd` 当键盘输入灌进去，所以能看到提示符和命令回显）
+2. 前端拿 id 连 `ws://…/api/term/ws?id=`，先收 backlog（启动 banner + 提示符），之后实时推
+3. 窗口尺寸变化 → `fit()` 算出行列 → 通过 WS 发 `resize`，后端调 `ResizePseudoConsole`
+4. 关窗格 / 退出应用 → WS 断开 → 后端 `ClosePseudoConsole`，子进程挂在 job object 上一起回收
+
+一个窗格一个 `Terminal` 实例，面板里用 CSS grid 排：1 个占满、2 个并排、3~4 个两行两列。
+高度拖 `.term-drag`，收起只是 `flex-basis: 0`，会话还在。
+
+### ConPTY 的坑
+
+**`STARTF_USESTDHANDLES` 必须显式设置，且三个句柄置空。**
+不设这一组，子进程会继承宿主进程的标准句柄 —— shell 的 banner 和提示符直接写进宿主自己的 stdout，
+伪终端这边一个字节都收不到，表现是「进程活着、CPU 也不高、就是不说话」。这一条查了很久，
+最后是逐行比对 node-pty 的 `conpty.cc` 才定位到。
+
+**`UpdateProcThreadAttribute` 传的是 HPCON 值本身，不是 `&hpc`。** 传地址的话系统会把指针当句柄，
+子进程挂不上伪终端（传一个假句柄会直接崩在 `CreateProcess` 里，可以拿这个特征自检）。
+
+**交给 ConPTY 的那对句柄要在 `CreateProcess` 之后再关。** 早关会让伪终端认为终端已经走了。
+
+**管道用 `CreatePipe` 就够**，不需要 node-pty 那套命名管道 + `ConnectNamedPipe`。
+
+**缓存不能只留最后一次输出。** shell 启动瞬间会连着吐好几段（清屏、填充空行、设标题），
+WS 连上之前这些都在后端攒着，重连后要一次性补发，否则终端打开是黑的。
+
 ## 图标
 
 `assets\icon.svg` 是源文件（160×160 网格），`assets\icon.ico` 由 `python assets\make_icon.py`
@@ -194,7 +229,8 @@ ico 一共 7 帧：16 / 24 用 `icon-small.svg` 那套画法（去掉后层卡�
 
 ## 边界
 
-- 只支持 Windows + Windows Terminal。
+- 只支持 Windows。内嵌终端依赖 ConPTY（Windows 10 1809 及以上）；选「外部终端」时才需要
+  装 Windows Terminal。
 - 只认 codebuddy / claude 两套历史格式。
 - 扫描是同步的，上千个会话会开始卡；目前量级够用。
 - **能不能真续上取决于 CLI 自己的鉴权状态**，工具只负责把命令和目录递对。

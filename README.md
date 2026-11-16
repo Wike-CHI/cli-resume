@@ -3,7 +3,9 @@
 重启电脑后，把 `codebuddy` / `claude` 的终端现场一把拉回来。
 
 不维护项目清单、不记笔记、不用手动 `cd` —— 直接读两个 CLI 自己落的会话历史，
-还原出「上次在哪些目录干活、会话 id 是多少」，然后用 Windows Terminal 多标签 `--resume` 回去。
+还原出「上次在哪些目录干活、会话 id 是多少」，然后 `--resume` 回去。
+桌面端还能把会话直接开在应用自己的终端面板里（ConPTY + xterm.js），不再弹外部终端窗口；
+多个会话并排看，也能随时切回外部终端。
 
 <img src="desktop/docs/desktop.png" width="49%" alt="80s 霓虹皮肤">
 <img src="desktop/docs/w98-desktop.png" width="49%" alt="Windows 98 皮肤">
@@ -67,6 +69,22 @@ bin\cli-resume.exe
 
 没装 CLI 也想看看界面长什么样：`bin\cli-resume.exe --demo`，会用内置示例数据渲染，
 不会扫本机历史也不会真的开终端。
+
+## 内嵌终端
+
+`desktop/src/terminal.cpp` 用 ConPTY 起一个真 shell（优先 PowerShell 7，退回系统自带的 5.1），
+前端是 xterm.js，中间一条 WebSocket，二进制帧传 PTY 的原始字节。子进程拿到的是真正的 TTY，
+codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里完全一样。
+
+- **并排**：面板顶部「▧」以当前窗格的目录再开一个；2 个并排，3~4 个两行两列
+- **切换**：顶部标签点哪个，键盘就归哪个；亮边框的是当前窗格
+- **高度**：拖面板顶边；「▾」收起面板但不杀会话
+- **入口**：顶栏终端图标随手开一个空 shell；左栏「进入方式」决定「进入」是内嵌还是弹外部终端
+- **回收**：关掉窗格或退出应用，ConPTY 会话连同里面的 node 进程一起结束（子进程挂在 job 上，
+  应用被强杀也不留孤儿）
+
+<img src="docs/term.png" width="49%" alt="霓虹：两个终端并排">
+<img src="docs/w98-term.png" width="49%" alt="98：两个终端并排">
 
 ## 它怎么知道你在哪些目录干过活
 

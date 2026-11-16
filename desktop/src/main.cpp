@@ -101,6 +101,15 @@ std::string actionScript(const std::string& act) {
            "for(var i=0;i<Math.min(3,b.length);i++){b[i].checked=true;}"
            "if(window.__onSelChange)window.__onSelChange();";
   }
+  if (act == "split") {
+    // 两个 pane 并排 + 一个不同命令，验证「分窗口并行」
+    return "var t=window.termAddPane;if(t){t({cwd:'C:/Windows',cmd:'echo PANE-ONE',title:'echo'});"
+           "setTimeout(function(){t({cwd:'C:/Users',cmd:'echo PANE-TWO',title:'pwd'});},500);}";
+  }
+  if (act == "term") {
+    // 打开内嵌终端面板，截图里能看到真实 shell 的输出
+    return "var b=document.getElementById('term-btn');if(b)b.click();";
+  }
   return "";  // 不认识的动作就当没有，截图仍是首屏原貌
 }
 

@@ -470,8 +470,9 @@ html, body {
 
 .rail-foot {
   margin-top: auto;
-  position: sticky;
-  bottom: 0;
+  /* 以前是 sticky：终端面板一开，左栏高度不够，这一条就浮在设置区上面把按钮压掉。
+     改成普通块，空间不够时跟着内容一起滚到底 */
+  position: static;
   padding: 9px 0 6px;
   border-top: 1px solid var(--line-soft);
   background: linear-gradient(180deg, rgba(8, 4, 18, .82), rgba(8, 4, 18, .98));
@@ -1068,6 +1069,196 @@ html, body {
 @media (max-width: 760px) {
   .body { grid-template-columns: 1fr; }
   .rail { display: none; }
+}
+
+/* ---------------- 内嵌终端面板 ---------------- */
+/* 结构：拖条 / 标签栏 / 网格。网格里每个 .term-pane 就是一个 xterm 实例，
+   1 个占满、2 个并排、3~4 个两行两列（布局由 app.js 的 termLayout 决定）。 */
+
+.termdock {
+  position: relative;
+  z-index: 21;
+  /* 高度按视口给，别把主列表挤没了；拖顶边还能再调 */
+  flex: 0 0 clamp(170px, 33vh, 340px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line-hot);
+  background: linear-gradient(180deg, #0b0618, #05020b);
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, .55);
+}
+.termdock[hidden] { display: none; }
+.termdock.collapsed { flex-basis: 0; overflow: hidden; border-top-color: var(--line); }
+.termdock.collapsed .term-bar,
+.termdock.collapsed .term-grid { display: none; }
+
+.term-drag {
+  flex: 0 0 auto;
+  height: 6px;
+  margin-top: -4px;
+  cursor: ns-resize;
+}
+.term-drag::after {
+  content: "";
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-hot) 30%, var(--line-hot) 70%, transparent);
+  opacity: .55;
+}
+.term-drag:hover::after { opacity: 1; }
+
+.term-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 8px 0 6px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(9, 4, 20, .9);
+}
+
+.term-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.term-tabs::-webkit-scrollbar { height: 0; }
+
+.term-tab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 210px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .02em;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.term-tab b {
+  font-weight: 400;
+  color: var(--cyan);
+  opacity: .65;
+}
+.term-tab.on {
+  border-color: var(--line-hot);
+  background: rgba(0, 240, 255, .08);
+  color: var(--text);
+}
+.term-tab.dead { color: var(--muted); opacity: .55; }
+
+.term-tools { display: flex; gap: 3px; flex: 0 0 auto; }
+.mini-btn {
+  width: 20px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: rgba(0, 240, 255, .05);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mini-btn:hover {
+  border-color: var(--line-hot);
+  color: var(--cyan);
+  background: rgba(0, 240, 255, .14);
+}
+
+.term-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+}
+
+.term-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #07030f;
+}
+.term-pane.on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 240, 255, .45);
+}
+.term-pane.dead .term-hd { color: var(--magenta); }
+
+.term-hd {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 19px;
+  padding: 0 6px;
+  background: rgba(13, 7, 28, .92);
+  border-bottom: 1px solid rgba(0, 240, 255, .12);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: var(--faint);
+}
+.term-hd .term-t {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.term-hd .term-meta {
+  margin-left: auto;
+  color: var(--faint);
+  opacity: .7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.term-x {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.term-x:hover { color: var(--magenta); }
+
+.term-box {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 5px 2px 4px 7px;
+}
+.term-box .xterm { height: 100%; }
+.term-box .xterm-viewport::-webkit-scrollbar { width: 9px; }
+.term-box .xterm-viewport::-webkit-scrollbar-track { background: rgba(0, 0, 0, .4); }
+.term-box .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, .26);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -41,6 +41,7 @@ json defaultSettings() {
       {"useContinue", false},
       {"window", 0},
       {"theme", "neon"},  // "neon"（80s CRT）| "win98"
+      {"termMode", "embedded"},  // "embedded"（应用内终端）| "external"（Windows Terminal）
       {"exclude", json::array({"\\temp\\", "\\system32", "\\node_modules\\", "\\appdata\\local\\temp"})},
   };
 }
@@ -250,6 +251,91 @@ void Backend::setupRoutes() {
     res.set_content("{}", "application/json; charset=utf-8");
   });
 
+  // ---------------- 内嵌终端 ----------------
+  // 前端每个 pane 连一条 WebSocket：二进制帧是 PTY 的原始字节（进出都走它），
+  // 文本帧只放控制消息，目前就一个 resize。
+  srv_.Post("/api/term/open", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      int cols = jval(body, "cols", json(100)).get<int>();
+      int rows = jval(body, "rows", json(28)).get<int>();
+      std::string err;
+      auto s = terms_.open(jstr(body, "cwd"), jstr(body, "cmd"), jstr(body, "shell"),
+                           jstr(body, "title"), cols, rows, err);
+      if (s) {
+        out = {{"ok", true}, {"id", s->id}, {"title", s->title}};
+      } else {
+        out["error"] = err;
+      }
+    } catch (const std::exception& e) {
+      out["error"] = std::string("请求解析失败：") + e.what();
+    }
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/term/resize", [this](const httplib::Request& req, httplib::Response& res) {
+    try {
+      json body = json::parse(req.body);
+      if (auto s = terms_.find(jstr(body, "id"))) {
+        s->resize(jval(body, "cols", json(100)).get<int>(),
+                  jval(body, "rows", json(28)).get<int>());
+      }
+    } catch (...) {
+    }
+    res.set_content("{\"ok\":true}", "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/term/close", [this](const httplib::Request& req, httplib::Response& res) {
+    try {
+      terms_.close(jstr(json::parse(req.body), "id"));
+    } catch (...) {
+    }
+    res.set_content("{\"ok\":true}", "application/json; charset=utf-8");
+  });
+
+  srv_.WebSocket("/api/term/ws", [this](const httplib::Request& req, httplib::ws::WebSocket& ws) {
+    std::string id = req.has_param("id") ? req.get_param_value("id") : "";
+    auto s = terms_.find(id);
+    if (!s) {
+      ws.close(httplib::ws::CloseStatus::PolicyViolation, "no such terminal");
+      return;
+    }
+    // 输出方向单开一个线程，handler 自己的线程专心阻塞读键盘输入
+    std::atomic<bool> stopPump{false};
+    std::thread pump([&] {
+      while (!stopPump.load() && ws.is_open()) {
+        std::string chunk = s->drain(200);
+        if (chunk.empty()) continue;
+        if (!ws.send(chunk.data(), chunk.size())) break;
+      }
+    });
+
+    std::string msg;
+    while (true) {
+      auto r = ws.read(msg);
+      if (r == httplib::ws::ReadResult::Fail) break;
+      if (r == httplib::ws::ReadResult::Timeout) continue;
+      if (r == httplib::ws::ReadResult::Binary) {
+        s->write(msg);
+      } else if (r == httplib::ws::ReadResult::Text) {
+        try {
+          json j = json::parse(msg);
+          if (jstr(j, "t") == "resize") {
+            s->resize(jval(j, "cols", json(100)).get<int>(),
+                      jval(j, "rows", json(28)).get<int>());
+          }
+        } catch (...) {
+        }
+      }
+    }
+    stopPump.store(true);
+    if (pump.joinable()) pump.join();
+    // 面板关掉、页面刷新都会走到这里：会话跟着回收，不在后台留 node 进程
+    terms_.close(id);
+  });
+
   srv_.Get(R"(/.*)", [this](const httplib::Request& req, httplib::Response& res) {
     if (!handleStatic(req.path, res)) {
       res.status = 404;
@@ -260,6 +346,9 @@ void Backend::setupRoutes() {
 
 bool Backend::start() {
   setupRoutes();
+  // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
+  // 两三个终端再叠加页面请求就会排队
+  srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };
   for (int p = 8712; p < 8760; ++p) {
     if (srv_.bind_to_port("127.0.0.1", p)) {
       port_ = p;
@@ -278,6 +367,9 @@ bool Backend::start() {
   return true;
 }
 
-void Backend::stop() { srv_.stop(); }
+void Backend::stop() {
+  terms_.closeAll();
+  srv_.stop();
+}
 
 }  // namespace crg

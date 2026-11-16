@@ -163,6 +163,8 @@ function applyTheme(name) {
   }
   // 只作为下次启动首帧的垫片，真正生效以 settings.json 为准
   try { localStorage.setItem('cli-resume-theme', skin); } catch (e) { /* 隐私模式 */ }
+  // 终端模块在文件末尾，用钩子避免 const 的 TDZ
+  if (typeof window.__termApplySkin === 'function') window.__termApplySkin(skin);
 }
 
 function syncRangeButtons() {
@@ -444,6 +446,14 @@ async function launchItems(items, note) {
     toast('没有可进入的对话', true);
     return;
   }
+  // 默认走应用内终端；设置里切成 external 才回到 Windows Terminal
+  if (S.settings.termMode !== 'external') {
+    await termOpenItems(items);
+    toast(items.length === 1
+      ? `已在应用内终端打开「${items[0].title || '该对话'}」`
+      : `已在终端面板并排打开 ${items.length} 个会话`);
+    return;
+  }
   try {
     const r = await fetch('/api/open', {
       method: 'POST',
@@ -569,7 +579,8 @@ $('set-save').addEventListener('click', async () => {
   const exclude = $('set-exclude').value.split('\n').map((s) => s.trim()).filter(Boolean);
   const maxAgeHours = Number($('set-range').value);
   const win = Number($('set-window').value);
-  await saveSettings({ exclude, maxAgeHours, window: win });
+  const termMode = $('set-term') ? $('set-term').value : 'embedded';
+  await saveSettings({ exclude, maxAgeHours, window: win, termMode });
   S.range = maxAgeHours;
   S.rangeTouched = true;
   syncRangeButtons();
@@ -590,9 +601,324 @@ function renderDoctor() {
   ].join('');
 }
 
+// ---------------- 内嵌终端 ----------------
+// 一个 pane = 一个 xterm 实例 + 一条 WebSocket。二进制帧是 PTY 原始字节（进出都走它），
+// 文本帧只放控制消息（resize）。后端是 src/terminal.cpp 里的 ConPTY，
+// 所以 codebuddy / claude 在这里拿到的是真 TTY，颜色和按键都正常。
+
+const TERM_THEMES = {
+  neon: {
+    background: '#07030f', foreground: '#d8e4f6',
+    cursor: '#00f0ff', cursorAccent: '#07030f',
+    selectionBackground: 'rgba(0, 240, 255, .28)',
+    black: '#120a24', red: '#ff2e97', green: '#39d98a', yellow: '#ffb31a',
+    blue: '#6c8af5', magenta: '#a855f7', cyan: '#00f0ff', white: '#d8e4f6',
+    brightBlack: '#6b5a8a', brightRed: '#ff6fb5', brightGreen: '#6ff0b0',
+    brightYellow: '#ffcf66', brightBlue: '#9db4ff', brightMagenta: '#c98cff',
+    brightCyan: '#7df9ff', brightWhite: '#ffffff',
+  },
+  // 98 的「MS-DOS 方式」：黑底、灰白字、深色 16 色
+  win98: {
+    background: '#000000', foreground: '#c0c0c0',
+    cursor: '#c0c0c0', cursorAccent: '#000000',
+    selectionBackground: 'rgba(0, 0, 128, .6)',
+    black: '#000000', red: '#800000', green: '#008000', yellow: '#808000',
+    blue: '#000080', magenta: '#800080', cyan: '#008080', white: '#c0c0c0',
+    brightBlack: '#808080', brightRed: '#ff0000', brightGreen: '#00ff00',
+    brightYellow: '#ffff00', brightBlue: '#0000ff', brightMagenta: '#ff00ff',
+    brightCyan: '#00ffff', brightWhite: '#ffffff',
+  },
+};
+
+const TM = { panes: [], active: null };
+
+function termSkin() {
+  return S.settings.theme === 'win98' ? 'win98' : 'neon';
+}
+
+function termOptions() {
+  const skin = termSkin();
+  return {
+    theme: TERM_THEMES[skin],
+    fontFamily: skin === 'win98'
+      ? '"Fixedsys", "Lucida Console", Consolas, "SimSun", monospace'
+      : 'Consolas, "Cascadia Mono", "JetBrains Mono", monospace',
+    fontSize: skin === 'win98' ? 13 : 12.5,
+    lineHeight: 1.18,
+    letterSpacing: 0,
+    cursorBlink: true,
+    scrollback: 5000,
+    allowProposedApi: true,
+    macOptionIsMeta: false,
+  };
+}
+
+// 换皮肤时把已经开着的终端也刷一遍配色
+window.__termApplySkin = function (skin) {
+  if (typeof TM === 'undefined' || !TM.panes) return;
+  const th = TERM_THEMES[skin === 'win98' ? 'win98' : 'neon'];
+  const opts = termOptions();
+  for (const p of TM.panes) {
+    p.term.options.theme = th;
+    p.term.options.fontFamily = opts.fontFamily;
+    p.term.options.fontSize = opts.fontSize;
+    termFit(p);
+  }
+};
+
+function termShow() {
+  const d = $('termdock');
+  d.hidden = false;
+  d.classList.remove('collapsed');
+}
+
+function termCollapse() {
+  $('termdock').classList.add('collapsed');
+}
+
+// 1 个占满、2 个并排、3~4 个两行两列 —— 就是「分窗口并行看」
+function termLayout() {
+  const grid = $('term-grid');
+  const n = TM.panes.length;
+  const cols = n <= 1 ? 1 : 2;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+  for (const p of TM.panes) {
+    p.el.classList.toggle('on', p === TM.active);
+    setTimeout(() => termFit(p), 0);
+  }
+  termRenderTabs();
+}
+
+function termRenderTabs() {
+  const box = $('term-tabs');
+  if (!box) return;
+  box.innerHTML = TM.panes
+    .map((p, i) =>
+      `<button class="term-tab${p === TM.active ? ' on' : ''}${p.ws ? '' : ' dead'}"` +
+      ` data-i="${i}" title="${esc(p.cwd || p.title)}"><b>${i + 1}</b>${esc(p.title)}</button>`)
+    .join('');
+}
+
+function termFit(pane) {
+  if (!pane || !pane.fit) return;
+  try {
+    pane.fit.fit();
+  } catch (e) {
+    return;  // 面板收起时容器是 0 尺寸，算不出行列，直接跳过
+  }
+  const cols = pane.term.cols;
+  const rows = pane.term.rows;
+  if (!cols || !rows) return;
+  if (pane.cols === cols && pane.rows === rows) return;
+  pane.cols = cols;
+  pane.rows = rows;
+  if (pane.ws && pane.ws.readyState === 1) {
+    pane.ws.send(JSON.stringify({ t: 'resize', cols, rows }));
+  } else if (pane.id && !DEMO) {
+    fetch('/api/term/resize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pane.id, cols, rows }),
+    }).catch(() => {});
+  }
+}
+
+function termConnect(pane) {
+  const ws = new WebSocket(`ws://${location.host}/api/term/ws?id=${encodeURIComponent(pane.id)}`);
+  ws.binaryType = 'arraybuffer';
+  pane.ws = ws;
+  ws.onopen = () => {
+    pane.el.classList.remove('dead');
+    termFit(pane);
+    if (TM.active === pane) pane.term.focus();
+    termRenderTabs();
+  };
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === 'string') return;
+    pane.term.write(new Uint8Array(ev.data));
+  };
+  ws.onclose = () => {
+    pane.ws = null;
+    pane.el.classList.add('dead');
+    termRenderTabs();
+  };
+}
+
+async function termAddPane(opt = {}) {
+  if (TM.panes.length >= 4) {
+    toast('最多同时 4 个终端，先关掉一个', true);
+    return null;
+  }
+  termShow();
+  const el = document.createElement('div');
+  el.className = 'term-pane';
+  el.innerHTML =
+    `<div class="term-hd"><span class="term-t">${esc(opt.title || 'terminal')}</span>` +
+    `<span class="term-meta"></span>` +
+    `<button class="term-x" title="关闭这个终端">×</button></div>` +
+    `<div class="term-box"></div>`;
+  $('term-grid').appendChild(el);
+
+  const term = new Terminal(termOptions());
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(el.querySelector('.term-box'));
+
+  const pane = {
+    id: '', term, fit, el, ws: null,
+    title: opt.title || 'terminal', cwd: opt.cwd || '', cmd: opt.cmd || '',
+    cols: 0, rows: 0, ro: null,
+  };
+  TM.panes.push(pane);
+  TM.active = pane;
+  termLayout();
+
+  el.querySelector('.term-x').addEventListener('click', (e) => {
+    e.stopPropagation();
+    termClosePane(pane);
+  });
+  el.addEventListener('mousedown', () => {
+    if (TM.active === pane) return;
+    TM.active = pane;
+    termLayout();
+  });
+  term.onData((d) => {
+    if (pane.ws && pane.ws.readyState === 1) pane.ws.send(new TextEncoder().encode(d));
+  });
+
+  pane.ro = new ResizeObserver(() => termFit(pane));
+  pane.ro.observe(el.querySelector('.term-box'));
+  termFit(pane);
+
+  if (DEMO) {
+    // 示例模式不真的起 shell，写几行说明，截图和首次体验都能看懂这块是干什么的
+    const dim = '\x1b[90m';
+    const rst = '\x1b[0m';
+    const cy = termSkin() === 'win98' ? '\x1b[36m' : '\x1b[96m';
+    const at = termSkin() === 'win98' ? '\x1b[33m' : '\x1b[95m';
+    term.writeln(`${dim}$${rst} ${opt.cmd || 'pwsh'}`);
+    term.writeln(`${at}⏺${rst} 示例模式：这里会是真实终端`);
+    term.writeln(`${dim}  真跑起来时，codebuddy / claude 直接在应用内执行，${rst}`);
+    term.writeln(`${dim}  点「▧」可以并排开第二个、第三个，互不干扰。${rst}`);
+    term.writeln('');
+    term.writeln(`${cy}>${rst} `);
+    el.querySelector('.term-meta').textContent = 'demo';
+    termRenderTabs();
+    return pane;
+  }
+
+  try {
+    const r = await fetch('/api/term/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cwd: pane.cwd, cmd: pane.cmd, title: pane.title,
+        cols: pane.cols || 100, rows: pane.rows || 30,
+      }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || '终端启动失败');
+    pane.id = r.id;
+    el.querySelector('.term-meta').textContent = pane.cwd ? pane.cwd.split(/[\\/]/).pop() : 'shell';
+    termConnect(pane);
+  } catch (e) {
+    el.classList.add('dead');
+    term.writeln(`\x1b[31m${e.message}\x1b[0m`);
+    plog('term open fail ' + e.message);
+  }
+  termRenderTabs();
+  return pane;
+}
+
+function termClosePane(pane) {
+  const i = TM.panes.indexOf(pane);
+  if (i < 0) return;
+  TM.panes.splice(i, 1);
+  if (pane.ro) pane.ro.disconnect();
+  if (pane.ws) {
+    try { pane.ws.close(); } catch (e) { /* 已经关过了 */ }
+  }
+  try { pane.term.dispose(); } catch (e) { /* 已经释放 */ }
+  pane.el.remove();
+  // 后端在 WS 断开时就会回收会话，这里只做兜底（接口是幂等的）
+  if (pane.id && !DEMO) {
+    fetch('/api/term/close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pane.id }),
+    }).catch(() => {});
+  }
+  TM.active = TM.panes[Math.min(i, TM.panes.length - 1)] || null;
+  termLayout();
+  if (!TM.panes.length) termCollapse();
+}
+
+function termCmdFor(it) {
+  const bin = it.tool === 'claude' ? 'claude' : 'codebuddy';
+  if (S.settings.useContinue || !it.sessionId) return bin;
+  return `${bin} --resume ${it.sessionId}`;
+}
+
+async function termOpenItems(items) {
+  for (const it of items) {
+    await termAddPane({ cwd: it.cwd, cmd: termCmdFor(it), title: it.title || it.cwd });
+  }
+}
+
+$('term-btn').addEventListener('click', () => {
+  if (TM.panes.length) {
+    termShow();
+    termLayout();
+    if (TM.active) TM.active.term.focus();
+    return;
+  }
+  termAddPane({ cwd: '', title: 'shell' });
+});
+
+$('term-split').addEventListener('click', () => {
+  const p = TM.active;
+  termAddPane({ cwd: p ? p.cwd : '', title: p ? p.title : 'shell' });
+});
+
+$('term-new').addEventListener('click', () => termAddPane({ cwd: '', title: 'shell' }));
+$('term-hide').addEventListener('click', termCollapse);
+
+$('term-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('.term-tab');
+  if (!b) return;
+  const p = TM.panes[Number(b.dataset.i)];
+  if (!p) return;
+  TM.active = p;
+  termLayout();
+  p.term.focus();
+});
+
+// 拖顶边改高度
+$('term-drag').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const dock = $('termdock');
+  const startY = e.clientY;
+  const startH = dock.getBoundingClientRect().height;
+  const move = (ev) => {
+    const h = Math.max(120, Math.min(window.innerHeight - 200, startH - (ev.clientY - startY)));
+    dock.style.flexBasis = h + 'px';
+    for (const p of TM.panes) termFit(p);
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+});
+
 // ---------------- 快捷键 ----------------
 
 document.addEventListener('keydown', (e) => {
+  // 焦点在终端里时所有键都归 xterm（Ctrl+A 是行首，不是全选目录）
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest('.termdock')) return;
   if (e.key === '/' && document.activeElement !== $('search')) {
     e.preventDefault();
     $('search').focus();

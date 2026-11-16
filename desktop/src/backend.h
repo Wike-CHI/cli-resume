@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "httplib.h"
+#include "terminal.h"
 
 namespace crg {
 
@@ -29,6 +30,7 @@ class Backend {
   std::string webRoot_;
   std::string settingsPath_;
   int port_ = 0;
+  TermManager terms_;
 
   std::mutex scanMu_;
   json cached_ = json::object();
