@@ -1,0 +1,13 @@
+{
+  "limit": 4,
+  "maxAgeHours": 72,
+  "both": false,
+  "continueFlag": false,
+  "window": 0,
+  "shell": "",
+  "exclude": [
+    "[\\\\/]Temp[\\\\/]",
+    "\\\\system32\\\\",
+    "\\\\node_modules\\\\"
+  ]
+}

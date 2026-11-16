@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" role="img">
+  <title>cli-resume</title>
+  <desc>Small-size variant: heavier strokes, no stacked card, for 16 to 24 pixel rendering.</desc>
+
+  <rect x="3" y="3" width="154" height="154" rx="33" fill="#151A24"/>
+
+  <rect x="26" y="48" width="108" height="64" rx="14" fill="none" stroke="#6C8AF5" stroke-width="5.5"/>
+
+  <path d="M47 70 L64 80 L47 90" fill="none" stroke="#3DD8A8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76 90 H113" stroke="#F5B84C" stroke-width="9" stroke-linecap="round"/>
+</svg>

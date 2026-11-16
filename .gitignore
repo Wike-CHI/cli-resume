@@ -1,0 +1,33 @@
+# 忽略规则只针对桌面端的编译产物：cli/bin 里是源码入口，不能一起忽略
+desktop/bin/
+desktop/obj/
+*.obj
+*.res
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# WebView2 SDK 不随仓库分发，见 desktop/README.md
+third_party/
+
+# 本地配置和日志
+config.json
+.cli-resume.json
+*.log
+
+# node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/
+*.user

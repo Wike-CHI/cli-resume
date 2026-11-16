@@ -1,0 +1,38 @@
+{
+  "name": "cli-resume",
+  "version": "0.1.0",
+  "description": "Restore your codebuddy / claude CLI terminal sessions after a reboot, from their own history files.",
+  "keywords": [
+    "codebuddy",
+    "claude",
+    "windows-terminal",
+    "session",
+    "resume",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Wike-CHI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wike-CHI/cli-resume.git"
+  },
+  "bin": {
+    "cr": "bin/cli-resume.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "cr.cmd",
+    "config.example.json"
+  ],
+  "scripts": {
+    "list": "node bin/cli-resume.js list",
+    "doctor": "node bin/cli-resume.js doctor"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "win32"
+  ]
+}
