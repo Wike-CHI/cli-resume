@@ -334,11 +334,16 @@ function cmdAutostart(args) {
 
 // 打开桌面版（cli-resume-gui），适合想先看一眼再点选的时候
 function cmdGui() {
-  const exe = path.resolve(__dirname, '..', '..', 'cli-resume-gui', 'bin', 'cli-resume.exe');
-  if (!fs.existsSync(exe)) {
-    console.log('\n  没找到桌面端程序：');
-    console.log('  ' + exe);
-    console.log('\n  先编译一次：cli-resume-gui\\build.bat\n');
+  // 仓库里是 cli/ 与 desktop/ 平级；早期版本的目录名是 cli-resume-gui，两种都认
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'desktop', 'bin', 'cli-resume.exe'),
+    path.resolve(__dirname, '..', '..', 'cli-resume-gui', 'bin', 'cli-resume.exe'),
+  ];
+  const exe = candidates.find((p) => fs.existsSync(p));
+  if (!exe) {
+    console.log('\n  没找到桌面端程序，找过这几个位置：');
+    for (const p of candidates) console.log('  ' + p);
+    console.log('\n  先编译一次：desktop\\build.bat\n');
     return 1;
   }
   const { spawn } = require('child_process');
