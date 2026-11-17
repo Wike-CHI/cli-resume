@@ -88,4 +88,16 @@ void logf(const std::string& msg) {
   }
 }
 
+std::string shortHash(const std::string& s) {
+  // FNV-1a 32 位：够短也够散，只用来给窗口/目录做后缀，不做安全用途
+  uint32_t h = 2166136261u;
+  for (unsigned char c : s) {
+    h ^= c;
+    h *= 16777619u;
+  }
+  char buf[9];
+  std::snprintf(buf, sizeof(buf), "%08x", h);
+  return std::string(buf);
+}
+
 }  // namespace crg

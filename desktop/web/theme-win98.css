@@ -1071,3 +1071,17 @@ html[data-skin="win98"] .hit-role.tool { color: var(--faint); }
 @media (max-width: 940px) {
   html[data-skin="win98"] .body { grid-template-columns: 210px 1fr; }
 }
+
+/* 工作区标记：98 里就是一个凹陷的白标签 */
+html[data-skin="win98"] .only-chip {
+  margin-left: 10px;
+  padding: 1px 3px 1px 6px;
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  color: #000000;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+html[data-skin="win98"] .only-chip b { color: #000080; font-weight: 700; }

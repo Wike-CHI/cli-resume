@@ -39,4 +39,8 @@ void logf(const std::string& msg);
 // 用户主目录（C:\Users\xxx），不带结尾斜杠
 std::string homeDir();
 
+// 8 位十六进制短哈希。给「一个目录一个窗口」做稳定 id：
+// 同一个目录永远落到同一个窗口，换进程也不变
+std::string shortHash(const std::string& s);
+
 }  // namespace crg

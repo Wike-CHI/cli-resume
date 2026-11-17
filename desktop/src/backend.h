@@ -16,7 +16,8 @@ namespace crg {
 
 class Backend {
  public:
-  explicit Backend(std::string webRoot);
+  // profile 为空 = 主窗口；否则每个目录一个工作区窗口，各自一份索引与布局
+  explicit Backend(std::string webRoot, std::string profile = "");
   bool start();
   void stop();
   int port() const { return port_; }
@@ -36,8 +37,10 @@ class Backend {
 
   httplib::Server srv_;
   std::string webRoot_;
-  std::string settingsPath_;
-  std::string layoutPath_;
+  std::string settingsPath_;   // 所有窗口共用
+  std::string layoutPath_;     // 每个窗口一份
+  std::string profile_;
+  std::string profileDir_;
   std::string dataDir_;
   int port_ = 0;
   TermManager terms_;

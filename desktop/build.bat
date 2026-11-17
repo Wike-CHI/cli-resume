@@ -22,7 +22,7 @@ echo [*] compiling...
 cl /nologo /std:c++17 /EHsc /O2 /MD /utf-8 /W3 /wd4996 ^
   /DNOMINMAX /DWIN32_LEAN_AND_MEAN /D_CRT_SECURE_NO_WARNINGS ^
   /I third_party /I third_party\webview2\include /I src ^
-  src\common.cpp src\scanner.cpp src\launcher.cpp src\terminal.cpp src\search.cpp src\summary.cpp src\stats.cpp src\exportmd.cpp src\backend.cpp src\main.cpp ^
+  src\common.cpp src\autostart.cpp src\scanner.cpp src\launcher.cpp src\terminal.cpp src\search.cpp src\summary.cpp src\stats.cpp src\exportmd.cpp src\backend.cpp src\main.cpp ^
   /Fo:bin\obj\ /Fe:bin\cli-resume.exe ^
   /link bin\obj\app.res /SUBSYSTEM:WINDOWS /LIBPATH:third_party\webview2\lib\x64 ^
   WebView2LoaderStatic.lib user32.lib gdi32.lib ole32.lib oleaut32.lib advapi32.lib ^

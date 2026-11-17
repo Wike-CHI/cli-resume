@@ -1,7 +1,10 @@
 #include "backend.h"
 
+#include "autostart.h"
+
 #include <algorithm>
 #include <cstdlib>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <thread>
@@ -49,15 +52,45 @@ json defaultSettings() {
   };
 }
 
+bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::string& err) {
+  wchar_t exe[MAX_PATH] = {0};
+  if (!GetModuleFileNameW(nullptr, exe, MAX_PATH)) {
+    err = "拿不到自己的路径";
+    return false;
+  }
+  std::wstring cmd = L"\"" + std::wstring(exe) + L"\" --win " + utf8ToWide(slug) +
+                     L" --only \"" + utf8ToWide(cwd) + L"\"";
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    err = "创建窗口失败（" + std::to_string(GetLastError()) + "）";
+    return false;
+  }
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  logf("spawn window slug=" + slug + " cwd=" + cwd);
+  return true;
+}
+
 }  // namespace
 
-Backend::Backend(std::string webRoot) : webRoot_(std::move(webRoot)) {
+Backend::Backend(std::string webRoot, std::string profile) : webRoot_(std::move(webRoot)) {
   const char* la = std::getenv("LOCALAPPDATA");
   std::string base = la && *la ? std::string(la) : (homeDir() + "\\AppData\\Local");
   dataDir_ = base + "\\CliResumeGui";
   settingsPath_ = dataDir_ + "\\settings.json";
-  layoutPath_ = dataDir_ + "\\layout.json";
   CreateDirectoryA(dataDir_.c_str(), nullptr);
+
+  // 多个窗口同时跑时，搜索索引和布局不能共用：
+  // 两个进程同时重写同一个索引文件会互相截断，布局也会互相覆盖
+  profile_ = std::move(profile);
+  profileDir_ = dataDir_;
+  if (!profile_.empty()) {
+    profileDir_ = dataDir_ + "\\win-" + profile_;
+    CreateDirectoryA(profileDir_.c_str(), nullptr);
+  }
+  layoutPath_ = profileDir_ + "\\layout.json";
 }
 
 std::string Backend::url() const {
@@ -305,6 +338,66 @@ void Backend::setupRoutes() {
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 
+  // ---------------- 窗口与开机自启 ----------------
+  srv_.Get("/api/autostart", [](const httplib::Request&, httplib::Response& res) {
+    json out = {{"ok", true}, {"on", autostartEnabled()}};
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/autostart", [](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      const bool on = jval(body, "on", json(false)).is_boolean()
+                          ? jval(body, "on", json(false)).get<bool>()
+                          : false;
+      std::string err;
+      if (setAutostart(on, err)) {
+        out = {{"ok", true}, {"on", autostartEnabled()}};
+      } else {
+        out["error"] = err;
+      }
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 一个目录一个窗口：已经在跑就把那扇窗提到前台，否则起一个新进程。
+  // 窗口/进程之间不共享索引，避免两个进程同时重写同一份索引文件
+  srv_.Post("/api/window/new", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      std::string cwd = jstr(body, "cwd");
+      if (cwd.empty()) {
+        out["error"] = "缺少目录";
+      } else {
+        std::string key = cwd;
+        for (auto& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const std::string slug = shortHash(key);
+        const std::wstring cls = utf8ToWide("CliResumeWin_" + slug);
+        if (HWND h = FindWindowW(cls.c_str(), nullptr)) {
+          ShowWindow(h, IsIconic(h) ? SW_RESTORE : SW_SHOW);
+          SetForegroundWindow(h);
+          out = {{"ok", true}, {"focused", true}};
+        } else {
+          std::string err;
+          if (spawnWorkspaceWindow(slug, cwd, err)) {
+            out = {{"ok", true}, {"focused", false}, {"slug", slug}};
+          } else {
+            out["error"] = err;
+          }
+        }
+      }
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
   srv_.Post("/api/open", [this](const httplib::Request& req, httplib::Response& res) {
     json out;
     try {      json body = json::parse(req.body);
@@ -499,8 +592,8 @@ void Backend::setupRoutes() {
 bool Backend::start() {
   setupRoutes();
   // 索引尽早开始建：第一次要通读几十上百个会话文件，早点跑完用户少等
-  search_.start(dataDir_);
-  summary_.start(dataDir_);
+  search_.start(profileDir_);
+  summary_.start(profileDir_);
   // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
   // 两三个终端再叠加页面请求就会排队
   srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };

@@ -4,9 +4,12 @@
 #include <shellapi.h>
 #include <wrl.h>
 
+#include <cctype>
+#include <cstdio>
 #include <string>
 
 #include "WebView2.h"
+#include "autostart.h"
 #include "backend.h"
 
 #pragma comment(lib, "WebView2LoaderStatic.lib")
@@ -22,16 +25,24 @@ struct AppState {
   crg::Backend* backend = nullptr;
   ICoreWebView2Controller* controller = nullptr;
   ICoreWebView2* webview = nullptr;
+  HINSTANCE hInst = nullptr;
   std::string baseUrl;
   std::string shotPath;
   std::string autoUi;
+  std::string profile;      // 空 = 主窗口；否则是工作区窗口
   bool hotkeyOk = false;
+  bool trayAdded = false;
+  bool shotMode = false;
+  bool hidHintShown = false;
+  UINT taskbarMsg = 0;
 };
 
 AppState g_app;
 
 constexpr UINT WM_APP_CAPTURE = WM_APP + 1;
 constexpr UINT WM_APP_AUTO = WM_APP + 2;
+constexpr UINT WM_APP_TRAY = WM_APP + 3;
+constexpr UINT kTrayId = 1001;
 
 void capturePreview(ICoreWebView2* webview, const std::string& outPath, HWND hwnd);
 
@@ -135,6 +146,63 @@ std::string actionScript(const std::string& act) {
   return "";  // 不认识的动作就当没有，截图仍是首屏原貌
 }
 
+// 把窗口拉出来 / 收起来（热键和托盘菜单共用）。拉起时顺手把光标放进搜索框。
+void toggleWindow(HWND hwnd) {
+  const bool focused = IsWindowVisible(hwnd) && !IsIconic(hwnd) && GetForegroundWindow() == hwnd;
+  if (focused) {
+    ShowWindow(hwnd, SW_HIDE);
+    return;
+  }
+  ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+  SetForegroundWindow(hwnd);
+  if (g_app.webview) {
+    g_app.webview->ExecuteScript(
+        L"var s=document.getElementById('search');if(s){s.focus();s.select();}", nullptr);
+  }
+}
+
+void addTrayIcon(HWND hwnd) {
+  NOTIFYICONDATAW nid{};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hwnd;
+  nid.uID = kTrayId;
+  nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+  nid.uCallbackMessage = WM_APP_TRAY;
+  nid.hIcon = (HICON)LoadImageW(g_app.hInst, MAKEINTRESOURCEW(1), IMAGE_ICON,
+                                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                LR_SHARED);
+  if (!nid.hIcon) nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));  // IDI_APPLICATION
+  lstrcpynW(nid.szTip, L"CLI Resume — 终端现场", ARRAYSIZE(nid.szTip));
+  g_app.trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+  crg::logf(std::string("tray icon ") + (g_app.trayAdded ? "ok" : "failed"));
+}
+
+void removeTrayIcon(HWND hwnd) {
+  if (!g_app.trayAdded) return;
+  NOTIFYICONDATAW nid{};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hwnd;
+  nid.uID = kTrayId;
+  Shell_NotifyIconW(NIM_DELETE, &nid);
+  g_app.trayAdded = false;
+}
+
+void showTrayMenu(HWND hwnd) {
+  HMENU m = CreatePopupMenu();
+  const bool visible = IsWindowVisible(hwnd) && !IsIconic(hwnd);
+  AppendMenuW(m, MF_STRING, 1, visible ? L"隐藏窗口" : L"显示窗口");
+  AppendMenuW(m, MF_STRING | (crg::autostartEnabled() ? MF_CHECKED : 0), 2, L"开机自启");
+  AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(m, MF_STRING, 3, L"退出");
+  POINT pt{};
+  GetCursorPos(&pt);
+  // 不先抢前台，菜单点外面不会消失
+  SetForegroundWindow(hwnd);
+  TrackPopupMenu(m, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, hwnd, nullptr);
+  DestroyMenu(m);
+  PostMessageW(hwnd, WM_NULL, 0, 0);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
     case WM_SIZE:
@@ -174,27 +242,67 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     }
     case WM_HOTKEY: {
-      // Ctrl+Shift+Space：在前台就收起，否则拉起来并把光标放进搜索框。
-      // 这就是「全局唤出」的全部——不驻留托盘，也不抢焦点以外的任何东西。
+      // Ctrl+Shift+Space：前台就收起，否则拉起来（托盘菜单里的显示/隐藏同一条路径）
       if (wp != 1) break;
       crg::logf("hotkey toggle");
-      const bool focused = IsWindowVisible(hwnd) && !IsIconic(hwnd) && GetForegroundWindow() == hwnd;
-      if (focused) {
-        ShowWindow(hwnd, SW_HIDE);
-      } else {
-        ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
-        SetForegroundWindow(hwnd);
-        if (g_app.webview) {
-          g_app.webview->ExecuteScript(
-              L"var s=document.getElementById('search');if(s){s.focus();s.select();}", nullptr);
-        }
-      }
+      toggleWindow(hwnd);
       return 0;
     }
+    case WM_APP_TRAY:
+      if (lp == WM_LBUTTONDBLCLK) {
+        ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+        SetForegroundWindow(hwnd);
+      } else if (lp == WM_RBUTTONUP) {
+        showTrayMenu(hwnd);
+      }
+      return 0;
+    case WM_COMMAND:
+      switch (LOWORD(wp)) {
+        case 1:
+          toggleWindow(hwnd);
+          return 0;
+        case 2: {
+          std::string err;
+          if (!crg::setAutostart(!crg::autostartEnabled(), err)) crg::logf("autostart fail " + err);
+          return 0;
+        }
+        case 3:
+          DestroyWindow(hwnd);  // 真退出：WM_DESTROY 会摘掉托盘图标
+          return 0;
+      }
+      break;
+    case WM_CLOSE:
+      // 点 X 只是收进托盘：这是个随时要唤醒的工具，关掉再等 6 秒重建索引不划算。
+      // 截图模式必须真的退出，否则 capture 完之后进程挂着不走
+      if (g_app.shotMode) {
+        DestroyWindow(hwnd);
+        return 0;
+      }
+      ShowWindow(hwnd, SW_HIDE);
+      if (!g_app.hidHintShown && g_app.trayAdded) {
+        g_app.hidHintShown = true;
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = hwnd;
+        nid.uID = kTrayId;
+        nid.uFlags = NIF_INFO;
+        nid.dwInfoFlags = NIIF_INFO;
+        lstrcpynW(nid.szInfoTitle, L"CLI Resume 还在后台", ARRAYSIZE(nid.szInfoTitle));
+        lstrcpynW(nid.szInfo, L"Ctrl+Shift+Space 唤出；右键托盘图标可退出", ARRAYSIZE(nid.szInfo));
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+      }
+      return 0;
     case WM_DESTROY:
       if (g_app.hotkeyOk) UnregisterHotKey(hwnd, 1);
+      removeTrayIcon(hwnd);
       PostQuitMessage(0);
       return 0;
+  }
+  // 资源管理器重启后托盘图标会消失，系统用 TaskbarCreated 通知所有程序补一个
+  if (g_app.taskbarMsg && msg == g_app.taskbarMsg) {
+    g_app.trayAdded = false;
+    addTrayIcon(hwnd);
+    return 0;
   }
   return DefWindowProcW(hwnd, msg, wp, lp);
 }
@@ -250,14 +358,32 @@ void capturePreview(ICoreWebView2* webview, const std::string& outPath, HWND hwn
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-  // 单实例：WebView2 的 user data 目录只能被一个进程持有，重复启动会直接把控制器创建打挂
-  // 截图模式（--shot）不参与，方便自动化验证
+  // 截图模式（--shot）不参与单实例，方便自动化验证
   bool shotMode = !getArgValue("--shot", "").empty();
+  g_app.shotMode = shotMode;
+
+  // 工作区窗口：--only <dir> 锁一个目录，--win <slug> 指定窗口 id（不给就按目录算）。
+  // 每个窗口一个进程、一份 WebView2 数据目录、一份索引 —— 不共享就不会互相写坏
+  const std::string onlyCwd = getArgValue("--only", "");
+  std::string winSlug = getArgValue("--win", "");
+  if (winSlug.empty() && !onlyCwd.empty()) {
+    std::string key = onlyCwd;
+    for (auto& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    winSlug = crg::shortHash(key);
+  }
+  g_app.profile = winSlug;
+  const bool trayMode = hasArg("--tray");
+  const std::wstring clsName =
+      winSlug.empty() ? std::wstring(kClassName) : (L"CliResumeWin_" + crg::utf8ToWide(winSlug));
+
   HANDLE once = nullptr;
   if (!shotMode) {
-    once = CreateMutexW(nullptr, TRUE, L"Local\\CliResumeGui_SingleInstance");
+    const std::wstring mtx = winSlug.empty()
+                                 ? std::wstring(L"Local\\CliResumeGui_SingleInstance")
+                                 : (L"Local\\CliResumeGui_" + crg::utf8ToWide(winSlug));
+    once = CreateMutexW(nullptr, TRUE, mtx.c_str());
     if (once && GetLastError() == ERROR_ALREADY_EXISTS) {
-      HWND existing = FindWindowW(kClassName, nullptr);
+      HWND existing = FindWindowW(clsName.c_str(), nullptr);
       if (existing) {
         ShowWindow(existing, SW_RESTORE);
         SetForegroundWindow(existing);
@@ -273,7 +399,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   crg::logf("=== CLI Resume GUI 启动 ===");
   crg::logf("web=" + webRoot);
 
-  crg::Backend backend(webRoot);
+  crg::Backend backend(webRoot, winSlug);
   if (!backend.start()) {
     MessageBoxW(nullptr, L"本地服务启动失败，请查看 data\\app.log", kTitle, MB_ICONERROR);
     return 1;
@@ -300,7 +426,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   else if (theme == "win98") bg = RGB(192, 192, 192);
   else if (theme == "xp") bg = RGB(236, 233, 216);
   wc.hbrBackground = CreateSolidBrush(bg);
-  wc.lpszClassName = kClassName;
+  wc.lpszClassName = clsName.c_str();
   RegisterClassExW(&wc);
 
   // CW_USEDEFAULT 交给系统放置时，窗口大小每次会被系统再调一遍，
@@ -311,16 +437,30 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   if (wx < 0) wx = 0;
   if (wy < 0) wy = 0;
 
-  HWND hwnd = CreateWindowExW(0, kClassName, kTitle, WS_OVERLAPPEDWINDOW, wx, wy,
+  // 工作区窗口的标题写目录名，任务栏里一眼分得清
+  std::wstring title = kTitle;
+  if (!onlyCwd.empty()) {
+    std::string name = onlyCwd;
+    size_t sep = name.find_last_of("\\/");
+    if (sep != std::string::npos && sep + 1 < name.size()) name = name.substr(sep + 1);
+    title = L"CLI Resume — " + crg::utf8ToWide(name);
+  }
+
+  HWND hwnd = CreateWindowExW(0, clsName.c_str(), title.c_str(), WS_OVERLAPPEDWINDOW, wx, wy,
                               kWinW, kWinH, nullptr, nullptr, hInst, nullptr);
   if (!hwnd) return 1;
-  ShowWindow(hwnd, SW_SHOW);
+  g_app.hInst = hInst;
+  // 托盘常驻；--tray（开机自启）时窗口先不弹，等热键或托盘叫它
+  addTrayIcon(hwnd);
+  g_app.taskbarMsg = RegisterWindowMessageW(L"TaskbarCreated");
+  if (!trayMode) ShowWindow(hwnd, SW_SHOW);
 
-  // 全局热键 Ctrl+Shift+Space：任何程序里按都能把窗口拉出来。
-  // 被别的程序占了就记一行日志，不影响启动和截图
-  g_app.hotkeyOk = RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT, VK_SPACE) != 0;
-  crg::logf(std::string("hotkey ctrl+shift+space ") +
-            (g_app.hotkeyOk ? "ok" : ("failed err=" + std::to_string(GetLastError()))));
+  // 全局热键只给主窗口：热键是系统级独占资源，工作区窗口抢了会让主窗口失效
+  if (winSlug.empty()) {
+    g_app.hotkeyOk = RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT, VK_SPACE) != 0;
+    crg::logf(std::string("hotkey ctrl+shift+space ") +
+              (g_app.hotkeyOk ? "ok" : ("failed err=" + std::to_string(GetLastError()))));
+  }
 
   std::wstring userData = exeDirW() + L"\\data\\WebView2";
   // --demo：加载内置示例数据，不扫本机历史也不拉起终端，用来截图或给人预览界面
@@ -333,6 +473,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   if (!skin.empty()) {
     baseUrl += baseUrl.find('#') == std::string::npos ? "#skin=" : "&skin=";
     baseUrl += skin;
+  }
+  if (!onlyCwd.empty()) {
+    // 目录里有中文和空格，hash 参数必须转义，否则 app.js 那边读出来是残的
+    std::string enc;
+    for (unsigned char c : onlyCwd) {
+      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == '/' || c == ':') {
+        enc += static_cast<char>(c);
+      } else {
+        char buf[4];
+        std::snprintf(buf, sizeof(buf), "%%%02X", c);
+        enc += buf;
+      }
+    }
+    baseUrl += baseUrl.find('#') == std::string::npos ? "#only=" : "&only=";
+    baseUrl += enc;
   }
   std::wstring url = crg::utf8ToWide(baseUrl);
 

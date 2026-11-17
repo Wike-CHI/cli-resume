@@ -11,6 +11,19 @@ const DEMO = !!window.CR_DEMO;
 // 不写回 settings.json，免得截个图把用户自己的主题改了
 const FORCED_SKIN = ((location.hash.match(/[#&]skin=([a-z0-9]+)/i) || [])[1] || '').toLowerCase();
 
+// --only <目录> 会以 #only=<urlencoded> 传进来：这扇窗只服务一个工作区。
+// 大目录名里全是中文和空格，所以必须 decode 一次
+const ONLY_INIT = (() => {
+  const m = location.hash.match(/[#&]only=([^&]*)/);
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (e) {
+    return '';
+  }
+})();
+let onlyCwd = ONLY_INIT;
+
 const S = {
   all: [],
   byId: new Map(),
@@ -201,6 +214,7 @@ function visibleList() {
   const q = $('search').value.trim().toLowerCase();
   const cutoff = S.range > 0 ? Date.now() - S.range * 3600e3 : 0;
   return S.all.filter((w) => {
+    if (onlyCwd && !samePath(w.cwd, onlyCwd)) return false;
     if (cutoff && w.lastActive < cutoff) return false;
     if (!q) return true;
     if (w.cwd.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)) return true;
@@ -285,6 +299,7 @@ function itemHtml(w, index) {
       </div>
       <div class="ws-side">
         <button class="mini-btn brief" data-brief="${esc(w.cwd)}" title="让本地模型复盘这个目录最近一次会话">复盘</button>
+        <button class="mini-btn" data-window="${esc(w.cwd)}" title="把这个目录单独开一个窗口">窗口</button>
         <button class="mini-btn" data-reveal="${esc(w.cwd)}" title="在资源管理器打开">定位</button>
         <button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>
         <span class="caret" title="${open ? '收起' : '展开对话列表'}"></span>
@@ -563,6 +578,72 @@ function renderBrief() {
   listEl.innerHTML = head + body;
   $('meta').textContent = b.loading ? '复盘生成中…' : `复盘 · ${b.name || b.cwd}`;
   updateBar();
+}
+
+// ---------------- 工作区窗口 ----------------
+// 一个目录一扇窗：--only 把窗口锁在这个目录，卡片上的「窗口」按钮开新的一扇。
+// 同一目录再次点击会找到已经开着的那扇，而不是叠出第三个。
+
+// 目录比较一律先归一：一个用正斜杠一个用反斜杠，不做这层就会「明明有却空了」
+function samePath(a, b) {
+  const n = (p) => String(p || '').toLowerCase().replace(/\//g, '\\');
+  return n(a) === n(b);
+}
+
+function onlyName(p) {
+  const s = String(p || '').replace(/[\\/]+$/, '');
+  const i = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'));
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function initOnlyChip() {
+  if (!onlyCwd) return;
+  const chip = $('only-chip');
+  if (!chip) return;
+  $('only-name').textContent = onlyName(onlyCwd);
+  chip.hidden = false;
+}
+
+// 等目录扫出来再展开：--only 传进来的路径可能和会话里的大小写/斜杠不一致
+function expandOnly() {
+  if (!onlyCwd) return;
+  const hit = S.all.find((w) => samePath(w.cwd, onlyCwd));
+  if (hit) S.expanded.add(hit.cwd.toLowerCase());
+}
+
+async function openWorkspaceWindow(cwd) {
+  if (DEMO) {
+    toast('示例模式不会真的开窗口');
+    return;
+  }
+  try {
+    const r = await fetch('/api/window/new', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || '打不开新窗口');
+    toast(r.focused ? '这个工作区已经有窗口，已切过去' : '已打开工作区窗口');
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+$('only-clear').addEventListener('click', () => {
+  onlyCwd = '';
+  $('only-chip').hidden = true;
+  render();
+});
+
+// ---------------- 开机自启 ----------------
+async function loadAutoStart() {
+  if (DEMO || !$('set-auto')) return;
+  try {
+    const r = await fetch('/api/autostart').then((x) => x.json());
+    $('set-auto').value = r.on ? '1' : '0';
+  } catch (e) {
+    /* 读不到就保持默认，不影响别的设置 */
+  }
 }
 
 // ---------------- 导出 Markdown ----------------
@@ -947,6 +1028,13 @@ listEl.addEventListener('click', (e) => {
     return;
   }
 
+  const winBtn = e.target.closest('[data-window]');
+  if (winBtn) {
+    e.stopPropagation();
+    openWorkspaceWindow(winBtn.dataset.window);
+    return;
+  }
+
   const openBtn = e.target.closest('[data-open]');
   if (openBtn) {
     e.stopPropagation();
@@ -1196,6 +1284,14 @@ $('set-save').addEventListener('click', async () => {
   const maxAgeHours = Number($('set-range').value);
   const win = Number($('set-window').value);
   const termMode = $('set-term') ? $('set-term').value : 'embedded';
+  // 开机自启落在注册表里，不在 settings.json，单独发一次
+  if ($('set-auto') && !DEMO) {
+    fetch('/api/autostart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ on: $('set-auto').value === '1' }),
+    }).catch(() => {});
+  }
   const restoreLayout = !$('set-restore') || $('set-restore').value !== '0';
   const llmUrl = $('set-llm-url') ? $('set-llm-url').value.trim() : S.settings.llmUrl;
   const llmModel = $('set-llm-model') ? $('set-llm-model').value.trim() : S.settings.llmModel;
@@ -1706,4 +1802,10 @@ tickClock();
 setInterval(tickClock, 1000);
 
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
-load(false).then(() => termRestoreLayout());
+initOnlyChip();
+loadAutoStart();
+load(false).then(() => {
+  expandOnly();
+  if (onlyCwd) render();  // 展开状态是加在 S.expanded 上的，要重绘一次才看得见
+  termRestoreLayout();
+});

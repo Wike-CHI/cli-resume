@@ -497,6 +497,33 @@ html, body {
 }
 .rail-foot b { color: var(--cyan); font-weight: 400; }
 
+/* 工作区窗口的标记：告诉用户「这扇窗只看一个目录」 */
+.only-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid rgba(var(--cyan-rgb), .4);
+  background: rgba(var(--cyan-rgb), .06);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+.only-chip[hidden] { display: none; }
+.only-chip b { color: var(--amber); font-weight: 500; }
+.only-chip button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.only-chip button:hover { color: var(--magenta); }
+
 /* ---------------- 主屏幕 ---------------- */
 
 .screen {

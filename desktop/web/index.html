@@ -155,6 +155,13 @@
           <input id="set-llm-model" type="text" spellcheck="false" placeholder="qwen3:8b">
         </div>
         <div class="field">
+          <label>开机自启</label>
+          <select id="set-auto">
+            <option value="0">关闭</option>
+            <option value="1">开机后驻留托盘</option>
+          </select>
+        </div>
+        <div class="field">
           <label>排除规则 <span class="hint">一行一个</span></label>
           <textarea id="set-exclude" rows="3" spellcheck="false" placeholder="\node_modules\&#10;\Temp\\"></textarea>
         </div>
@@ -177,6 +184,10 @@
     <main class="screen">
       <div class="screen-hd">
         <span class="cmd">C:\&gt; cli-resume --scan</span>
+        <span class="only-chip" id="only-chip" hidden>
+          工作区 · <b id="only-name"></b>
+          <button id="only-clear" title="在这个窗口里显示全部目录">×</button>
+        </span>
         <span class="meta" id="meta"></span>
       </div>
 
