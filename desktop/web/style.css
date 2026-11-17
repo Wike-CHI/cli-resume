@@ -1021,6 +1021,115 @@ html, body {
 .brief-turn { display: flex; gap: 8px; padding: 7px 0; border-top: 1px solid rgba(255, 255, 255, .05); }
 .brief-turn-text { font-size: 12px; line-height: 1.6; color: var(--muted); }
 
+/* ---------------- Token 统计 ---------------- */
+.stats-wrap { display: flex; flex-direction: column; gap: 12px; padding: 12px 2px 24px; }
+
+.stat-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(10, 5, 22, .72);
+  clip-path: var(--cut);
+}
+.stat-k { font-size: 10px; letter-spacing: .1em; color: var(--muted); }
+.stat-v { font-family: var(--mono); font-size: 17px; color: var(--cyan); }
+.stat-card:last-child .stat-v { color: var(--magenta); }
+.stat-h { font-size: 9.5px; color: var(--faint); }
+
+.stat-chart { padding: 12px 12px 8px; border: 1px solid var(--line); background: rgba(10, 5, 22, .6); }
+.stat-bars { display: flex; align-items: flex-end; gap: 3px; height: 130px; }
+.stat-bar { flex: 1 1 0; min-width: 3px; height: 100%; display: flex; flex-direction: column-reverse; }
+.stat-bar:hover .seg.in { box-shadow: 0 0 10px rgba(0, 240, 255, .5); }
+.seg { display: block; width: 100%; }
+.seg.in { background: linear-gradient(180deg, #00f0ff, #0b7f96); }
+.seg.out { background: var(--magenta); }
+.seg.cache { background: rgba(108, 138, 245, .55); }
+
+.stat-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.stat-legend .seg { width: 9px; height: 9px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+.stat-range-note { margin-left: auto; color: var(--faint); }
+
+.stat-panel { padding: 10px 12px; border: 1px solid var(--line); background: rgba(10, 5, 22, .6); }
+.stat-panel h3 {
+  margin: 0 0 8px;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-top: 1px solid rgba(255, 255, 255, .05);
+  font-size: 11.5px;
+}
+.stat-row.head {
+  padding-top: 0;
+  border-top: 0;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+}
+.stat-m { font-family: var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-n { font-family: var(--mono); color: var(--muted); text-align: right; }
+.stat-row .cost { color: var(--amber); }
+
+.stat-sess {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, .05);
+  cursor: pointer;
+}
+.stat-sess:hover .stat-sess-t { color: var(--cyan); }
+.stat-sess-t { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-sess-c { font-family: var(--mono); font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-empty { color: var(--faint); font-size: 11.5px; }
+.stat-note { margin: 0; font-size: 10.5px; line-height: 1.6; color: var(--faint); }
+
+/* 顶栏里那排 7/30/90 天 */
+.stat-ranges { margin-left: auto; display: flex; gap: 4px; }
+.stat-ranges .mini-btn {
+  margin-left: 0;
+  width: auto;
+  height: 22px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.stat-ranges .mini-btn.on { color: var(--cyan); border-color: var(--cyan); opacity: 1; }
+.deep-head .stat-ranges + .mini-btn { margin-left: 0; }
+
+/* 会话行上的「导出」：淡着，hover 整行才提亮，不跟「进入」抢 */
+.sess-exp {
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  color: var(--faint);
+  opacity: .35;
+  cursor: pointer;
+}
+.sess-row:hover .sess-exp,
+.stat-sess:hover .sess-exp { opacity: .85; }
+.sess-exp:hover { color: var(--amber); border-color: rgba(255, 179, 26, .45); opacity: 1; }
+
 .hit-group {
   flex-shrink: 0;
   margin-bottom: 2px;

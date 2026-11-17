@@ -35,6 +35,7 @@ const S = {
   busy: false,
   deep: null,   // 全文搜索结果：null 表示当前是普通列表
   brief: null,  // 本地模型复盘：null 表示没在这个视图
+  statsView: null,  // token 统计：null 表示没在这个视图
 };
 
 // 卡片展开后先显示这么多条，剩下的藏在「还有 N 个」后面
@@ -224,6 +225,9 @@ function sessionRowHtml(ws, s, index) {
       <span class="tool-dot ${cls}"></span>
       <span class="sess-title">${esc(title)}</span>
       <span class="sess-when">${esc(shortTime(s.mtime))}</span>
+      <span class="sess-exp" data-export="1" data-cwd="${esc(ws.cwd)}" data-tool="${esc(s.tool)}"
+            data-sid="${esc(s.sessionId)}" data-title="${esc(title)}"
+            title="导出成 Markdown">导出</span>
       <span class="sess-go">进入</span>
     </div>`;
 }
@@ -559,7 +563,254 @@ function renderBrief() {
   updateBar();
 }
 
+// ---------------- 导出 Markdown ----------------
+// 一个会话一个 .md，落在「文档\cli-resume」：标题、目录、时间范围、逐轮对话，
+// 工具调用收成引用行，读起来像一份稿子而不是日志。
+async function exportSession(ds) {
+  if (DEMO) {
+    toast('示例模式没有真实会话可导出');
+    return;
+  }
+  toast(`正在导出「${ds.title || '会话'}」…`);
+  try {
+    const r = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ds),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || '导出失败');
+    const name = String(r.path).split(/[\\/]/).pop();
+    // 不自动弹资源管理器：连续导出几个会话时会被窗口糊脸。路径说全，自己能找
+    toast(`已导出 ${r.turns} 条 → ${name}（文档\\cli-resume）`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// ---------------- Token / 成本统计 ----------------
+function fmtTok(n) {
+  const v = Number(n) || 0;
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e8 ? 0 : 1) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(v >= 1e5 ? 0 : 1) + 'K';
+  return String(v);
+}
+
+function fmtNum(n) {
+  const v = Number(n) || 0;
+  return v >= 1e4 ? (v / 1e3).toFixed(0) + 'K' : String(v);
+}
+
+function openStats() {
+  if (S.statsView) {
+    S.statsView = null;
+    render();
+    return;
+  }
+  S.statsView = { loading: true, data: null, days: 30, tries: 0 };
+  render();
+  fetchStats(false);
+}
+
+// 示例模式编一份形状真实的用量，截图和首次体验都能看懂这张图在说什么
+function demoStats(days) {
+  const daily = [];
+  let tIn = 0, tOut = 0, tCr = 0, tCalls = 0;
+  for (let i = 0; i < days; i++) {
+    const wave = 0.6 + 0.4 * Math.sin(i / 2.7);
+    const base = 180e6 * wave * (i % 7 === 0 ? 0.35 : 1);
+    const inTok = Math.round(base * 0.55);
+    const outTok = Math.round(base * 0.018);
+    const cr = Math.round(base * 0.44);
+    tIn += inTok; tOut += outTok; tCr += cr; tCalls += Math.round(160 * wave);
+    daily.push({ d: '', in: inTok, out: outTok, cacheRead: cr, tokens: inTok + outTok + cr, calls: 0 });
+  }
+  return {
+    ok: true, ready: true, files: 21, totalFiles: 21, days,
+    total: { in: tIn, out: tOut, cacheRead: tCr, cacheWrite: 0, calls: tCalls,
+      tokens: tIn + tOut + tCr, cost: (tIn * 3 + tOut * 15 + tCr * 0.3) / 1e6 },
+    daily,
+    models: [
+      { model: 'claude-sonnet-4-5', in: Math.round(tIn * 0.6), out: Math.round(tOut * 0.6),
+        cacheRead: Math.round(tCr * 0.6), calls: Math.round(tCalls * 0.6), priced: true,
+        cost: (tIn * 0.6 * 3 + tOut * 0.6 * 15 + tCr * 0.6 * 0.3) / 1e6,
+        tokens: Math.round((tIn + tOut + tCr) * 0.6) },
+      { model: 'kimi-for-coding', in: Math.round(tIn * 0.4), out: Math.round(tOut * 0.4),
+        cacheRead: Math.round(tCr * 0.4), calls: Math.round(tCalls * 0.4), priced: false,
+        cost: 0, tokens: Math.round((tIn + tOut + tCr) * 0.4) },
+    ],
+    top: [
+      { title: '把首屏的 SSR 渲染改成流式输出', cwd: 'D:\\work\\acme-portal', tool: 'claude',
+        sessionId: 'demo-1', tokens: Math.round((tIn + tOut + tCr) * 0.18), cost: 0 },
+      { title: 'Bulk Export 评估与 16 个月回填', cwd: 'D:\\work\\blogo', tool: 'codebuddy',
+        sessionId: 'demo-2', tokens: Math.round((tIn + tOut + tCr) * 0.12), cost: 0 },
+      { title: 'WebView2 单实例与截图漂移', cwd: 'D:\\work\\cli-resume', tool: 'claude',
+        sessionId: 'demo-3', tokens: Math.round((tIn + tOut + tCr) * 0.07), cost: 0 },
+    ],
+    unpriced: ['kimi-for-coding'],
+  };
+}
+
+async function fetchStats(retry) {
+  const v = S.statsView;
+  if (!v) return;
+  if (!retry) {
+    v.loading = true;
+    render();
+  }
+  if (DEMO) {
+    v.data = demoStats(v.days);
+    v.loading = false;
+    render();
+    return;
+  }
+  try {
+    const r = await fetch(`/api/stats?days=${v.days}`).then((x) => x.json());
+    if (S.statsView !== v) return;
+    v.data = r;
+    v.loading = false;
+    render();
+    // 索引还在建：过一会儿自己再拉一次，数字会往上走
+    if (!r.ready && (v.tries || 0) < 20) {
+      v.tries = (v.tries || 0) + 1;
+      setTimeout(() => {
+        if (S.statsView === v) fetchStats(true);
+      }, 1500);
+    }
+  } catch (e) {
+    if (S.statsView !== v) return;
+    v.loading = false;
+    v.error = e.message;
+    render();
+  }
+}
+
+function renderStats() {
+  const v = S.statsView;
+  const d = v.data || {};
+  const t = d.total || {};
+  const days = v.days;
+
+  const head = `
+    <div class="deep-head">
+      <span class="deep-q">Token 统计</span>
+      <span class="deep-sub">${d.ready
+        ? `${d.files} 个会话 · ${fmtTok(t.tokens || 0)} token`
+        : `索引 ${d.files || 0}/${d.totalFiles || 0} · 先显示已有部分`}</span>
+      <span class="stat-ranges">
+        ${[7, 30, 90].map((n) =>
+          `<button class="mini-btn${n === days ? ' on' : ''}" data-days="${n}">${n} 天</button>`).join('')}
+      </span>
+      <button class="mini-btn" data-back="1">返回列表</button>
+    </div>`;
+
+  if (v.error) {
+    listEl.innerHTML = head + `<div class="empty"><h3>统计没拿到</h3><p>${esc(v.error)}</p></div>`;
+    $('meta').textContent = '统计失败';
+    updateBar();
+    return;
+  }
+
+  if (!d.daily) {
+    listEl.innerHTML = head + `<div class="empty"><h3>正在汇总 token…</h3>
+      <p>用量是从会话索引里直接读的，不用重扫历史文件。</p></div>`;
+    $('meta').textContent = '统计中…';
+    updateBar();
+    return;
+  }
+
+  const daily = d.daily;
+  const max = Math.max(1, ...daily.map((x) => x.tokens || 0));
+  const bars = daily.map((x) => {
+    const total = x.tokens || 0;
+    const h = Math.max(1, Math.round((total / max) * 100));
+    const outH = total ? (x.out || 0) / total * h : 0;
+    const cacheH = total ? (x.cacheRead || 0) / total * h : 0;
+    const inH = Math.max(0, h - outH - cacheH);
+    return `<div class="stat-bar" title="${esc(x.d || '')}：${fmtTok(total)} token">
+      <i class="seg out" style="height:${outH.toFixed(2)}%"></i>
+      <i class="seg cache" style="height:${cacheH.toFixed(2)}%"></i>
+      <i class="seg in" style="height:${inH.toFixed(2)}%"></i>
+    </div>`;
+  }).join('');
+
+  const cost = t.cost || 0;
+  const cards = [
+    ['输入', fmtTok(t.in || 0), '每轮重新送达的上下文'],
+    ['输出', fmtTok(t.out || 0), '模型生成的正文'],
+    ['缓存读', fmtTok(t.cacheRead || 0), '命中缓存的输入'],
+    ['调用', fmtNum(t.calls || 0), '一次 API 请求算一次'],
+    ['估算成本', cost > 0 ? '$' + cost.toFixed(2) : '—',
+      cost > 0 ? '按 Anthropic 公开单价' : '本机模型无公开单价'],
+  ].map(([k, val, hint]) => `
+    <div class="stat-card"><span class="stat-k">${k}</span>
+      <b class="stat-v">${val}</b><span class="stat-h">${hint}</span></div>`).join('');
+
+  const modelHead = `
+    <div class="stat-row head">
+      <span class="stat-m">模型</span><span class="stat-n">调用</span>
+      <span class="stat-n">输入</span><span class="stat-n">输出</span>
+      <span class="stat-n">缓存读</span><span class="stat-n">成本</span>
+    </div>`;
+  const modelRows = (d.models || []).map((m) => `
+    <div class="stat-row">
+      <span class="stat-m" title="${esc(m.model)}">${esc(m.model)}</span>
+      <span class="stat-n">${fmtNum(m.calls)}</span>
+      <span class="stat-n">${fmtTok(m.in)}</span>
+      <span class="stat-n">${fmtTok(m.out)}</span>
+      <span class="stat-n">${fmtTok(m.cacheRead)}</span>
+      <span class="stat-n cost">${m.priced ? '$' + (m.cost || 0).toFixed(2) : '—'}</span>
+    </div>`).join('');
+
+  const topRows = (d.top || []).map((x) => `
+    <div class="stat-sess" data-enter="1" data-cwd="${esc(x.cwd || '')}"
+         data-tool="${esc(x.tool || '')}" data-sid="${esc(x.sessionId || '')}"
+         data-title="${esc(x.title || '')}" title="进入这个会话">
+      <span class="stat-sess-t">${esc(x.title || '（无标题）')}</span>
+      <span class="stat-sess-c">${esc(x.cwd || '')}</span>
+      <span class="stat-n">${fmtTok(x.tokens)}</span>
+      <span class="sess-exp" data-export="1" data-cwd="${esc(x.cwd || '')}"
+            data-tool="${esc(x.tool || '')}" data-sid="${esc(x.sessionId || '')}"
+            data-title="${esc(x.title || '')}">导出</span>
+    </div>`).join('');
+
+  const unpriced = (d.unpriced || []).filter(Boolean);
+  const note = cost > 0
+    ? `成本按 Anthropic 公开单价换算（Sonnet $3 / $15、Opus $15 / $75、Haiku $1 / $5，每百万 token），仅供参考。`
+    : `当前会话都来自订阅制或未公开单价的模型，只统计 token，不折算成本。`;
+
+  const body = `<div class="stats-wrap">
+    <div class="stat-cards">${cards}</div>
+    <div class="stat-chart">
+      <div class="stat-bars">${bars}</div>
+      <div class="stat-legend">
+        <span><i class="seg in"></i>输入</span>
+        <span><i class="seg out"></i>输出</span>
+        <span><i class="seg cache"></i>缓存读</span>
+        <span class="stat-range-note">${esc(d.from || '')} → ${esc(d.to || '')}</span>
+      </div>
+    </div>
+    <div class="stat-panel">
+      <h3>按模型</h3>
+      ${modelHead}${modelRows || '<p class="stat-empty">还没有用量记录</p>'}
+    </div>
+    <div class="stat-panel">
+      <h3>最费 token 的会话</h3>
+      ${topRows || '<p class="stat-empty">还没有用量记录</p>'}
+    </div>
+    <p class="stat-note">${note}${unpriced.length ? ` 未计价：${esc(unpriced.join('、'))}` : ''}</p>
+  </div>`;
+
+  listEl.innerHTML = head + body;
+  $('meta').textContent = `近 ${days} 天 · ${fmtTok(t.tokens || 0)} token`;
+  updateBar();
+}
+
 function render() {
+  if (S.statsView) {
+    renderStats();
+    return;
+  }
   if (S.brief) {
     renderBrief();
     return;
@@ -631,7 +882,31 @@ listEl.addEventListener('click', (e) => {
   if (back) {
     S.deep = null;
     S.brief = null;
+    S.statsView = null;
     render();
+    return;
+  }
+
+  // 统计页的时间范围
+  const dbtn = e.target.closest('[data-days]');
+  if (dbtn && S.statsView) {
+    const n = Number(dbtn.dataset.days);
+    if (n) {
+      S.statsView.days = n;
+      S.statsView.tries = 0;
+      fetchStats(false);
+    }
+    return;
+  }
+
+  // 导出：按会话恢复成 Markdown，落在「文档\cli-resume」
+  const exp = e.target.closest('[data-export]');
+  if (exp) {
+    e.stopPropagation();
+    exportSession({
+      cwd: exp.dataset.cwd, tool: exp.dataset.tool,
+      sid: exp.dataset.sid, title: exp.dataset.title,
+    });
     return;
   }
 
@@ -1293,6 +1568,8 @@ async function termOpenItems(items) {
   }
 }
 
+$('stats-btn').addEventListener('click', openStats);
+
 $('term-btn').addEventListener('click', () => {
   if (TM.panes.length) {
     termShow();
@@ -1355,6 +1632,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
+    if (S.statsView) {
+      S.statsView = null;
+      render();
+      return;
+    }
     if (S.brief) {
       S.brief = null;
       render();

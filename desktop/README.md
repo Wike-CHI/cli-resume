@@ -85,7 +85,8 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 
 窗口切成三块，不是常见的「顶栏 + 列表 + 抽屉」：
 
-- **顶栏**：机身铭牌（`CLI//RESUME`）、电源与活动指示灯、时钟、搜索框
+- **顶栏**：机身铭牌（`CLI//RESUME`）、电源与活动指示灯、时钟、搜索框，右侧一排按钮：
+  token 统计、内嵌终端、换皮肤、重新扫描
 - **左栏（常驻控制台）**：时间范围、设置、环境自检、快捷键提示。设置原来是从右侧滑出来的抽屉，
   现在一直开着——排除规则和环境自检随时能看到，不用先点开一层
 - **主屏幕**：命令行样式的标题栏 + 目录卡片列表 + 底部操作台
@@ -100,6 +101,7 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 - **进入**：点对话行（或卡片上的「进入」按钮走最近那条），直接在应用内终端里 `--resume` 那条会话；
   默认走内嵌终端，左栏「进入方式」可以切回外部终端窗口
 - **复盘**：卡片上的「复盘」把最近一次会话交给本机模型，回「做了 / 卡在 / 下一步」（详见下面的「本地模型复盘」）
+- **导出**：会话行右侧的「导出」把这次对话写成 Markdown，落在 `文档\cli-resume\`（详见下面的「导出与统计」）
 - **定位**：在资源管理器里打开这个目录
 
 <img src="docs/sessions.png" width="49%" alt="霓虹：展开后的对话列表">
@@ -221,6 +223,40 @@ WebView2 一路重试到 60 秒超时才放弃，页面一片空白。换成 `li
 
 <img src="docs/search.png" width="49%" alt="霓虹：全文搜索结果">
 <img src="docs/w98-search.png" width="49%" alt="98：全文搜索结果">
+
+## 导出与统计
+
+### 导出 Markdown
+
+会话行右侧的「导出」→ `POST /api/export` → `src/exportmd.cpp` 重读源 jsonl，
+拼成一份能直接读的稿子：标题、目录、会话 id、时间范围、逐轮问答，工具调用收成引用行。
+输出到 `文档\cli-resume\<标题>-YYYYMMDD-HHMM.md`，重名自动加 `-2`。
+
+- **不读索引**：索引按搜索需要把每条消息截到 700 字，导出要全文
+- **claude 的一条回复会被拆成多行写**（thinking / text / tool_use 各一行，`message.id` 相同），
+  按 id 合并成一段；只有工具调用、没有正文的片段也并进上一条，
+  否则稿子里全是孤零零的「## 助手」
+- 工具调用渲染成 `> 工具 \`Bash\`：\`{...}\``，参数截 300 字、反引号换成单引号
+- 子代理的旁支（`isSidechain`）和 `<system-reminder>` 这类注入内容不导出
+
+### Token 统计
+
+建立搜索索引时顺手把每行的 usage 抽出来，按「本地日期 + 模型」分桶写进索引（v3）。
+`/api/stats?days=` 只做汇总，200 个会话几毫秒，不用再读 300MB 源文件。
+
+两个必须处理的坑：
+
+- **claude 同一条消息写多行、每行带同一份 usage**，不去重会几乎翻倍。按 `message.id` 去重
+- **codebuddy 新版同时有 `message.usage` 和 `providerData.rawUsage`，模型名只在后者里**。
+  优先取 `rawUsage`，否则统计表里全是 `unknown` —— 这也是索引从 v2 提到 v3 的原因
+
+成本只内置 Anthropic 公开价（每百万 token，按模型名里的 `opus` / `sonnet` / `haiku` 匹配）。
+kimi-for-coding、deepseek、k3 这些是订阅制或没有按量价，只统计 token，成本列显示「—」。
+本机 30 天的实际数据是 6.3B token，其中输入占大头 —— 每一步都把完整上下文重发一遍，
+这个数字比「以为自己在花多少钱」更有参考价值。
+
+<img src="docs/stats.png" width="49%" alt="霓虹：token 统计">
+<img src="docs/w98-stats.png" width="49%" alt="98：token 统计">
 
 ## 本地模型复盘
 

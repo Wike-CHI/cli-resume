@@ -60,6 +60,59 @@ std::string flatten(const std::string& in) {
   return out;
 }
 
+// "2026-11-17T01:57:22.351Z" → epoch ms（按 UTC 解析）。失败返回 0
+int64_t isoToMs(const std::string& s) {
+  if (s.size() < 19) return 0;
+  int Y = 0, M = 0, D = 0, h = 0, m = 0, sec = 0;
+  if (std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &Y, &M, &D, &h, &m, &sec) != 6) return 0;
+  int ms = 0;
+  const char* dot = std::strchr(s.c_str() + 19, '.');
+  if (dot) ms = std::atoi(dot + 1);
+  std::tm tm{};
+  tm.tm_year = Y - 1900;
+  tm.tm_mon = M - 1;
+  tm.tm_mday = D;
+  tm.tm_hour = h;
+  tm.tm_min = m;
+  tm.tm_sec = sec;
+  return static_cast<int64_t>(_mkgmtime(&tm)) * 1000 + ms;
+}
+
+// 时间戳 → 本地日期。统计按「我这边的今天」算，不是 UTC 日
+std::string dayOf(const json& ts) {
+  int64_t ms = 0;
+  if (ts.is_number()) {
+    ms = ts.get<int64_t>();
+  } else if (ts.is_string()) {
+    ms = isoToMs(ts.get<std::string>());
+  }
+  if (ms <= 0) return "";
+  const std::time_t t = static_cast<std::time_t>(ms / 1000);
+  std::tm local{};
+  localtime_s(&local, &t);
+  char buf[16] = {0};
+  std::strftime(buf, sizeof(buf), "%Y-%m-%d", &local);
+  return buf;
+}
+
+int64_t numOf(const json& o, const char* k) {
+  auto it = o.find(k);
+  if (it == o.end() || !it->is_number()) return 0;
+  return it->get<int64_t>();
+}
+
+UsageBucket* bucketFor(std::vector<UsageBucket>& v, const std::string& day,
+                       const std::string& model) {
+  for (auto& b : v) {
+    if (b.day == day && b.model == model) return &b;
+  }
+  UsageBucket b;
+  b.day = day;
+  b.model = model;
+  v.push_back(std::move(b));
+  return &v.back();
+}
+
 // CLI 会把注入内容也记成 user 消息（system-reminder、local-command-stdout…），
 // 这些不是人说的话
 bool isNoise(const std::string& t) {
@@ -214,14 +267,21 @@ void SearchIndex::writeIndexFile(const Doc& doc) const {
   const std::string path = indexPath(keyOf(doc.tool, doc.sessionId));
   std::ofstream f(utf8ToWide(path), std::ios::binary | std::ios::trunc);
   if (!f) return;
-  f << dumpJson(json{{"v", 1},
+  json usage = json::array();
+  for (const auto& b : doc.usage) {
+    usage.push_back({{"d", b.day}, {"m", b.model},  {"i", b.in},
+                     {"o", b.out}, {"cr", b.cacheRead}, {"cw", b.cacheWrite},
+                     {"n", b.calls}});
+  }
+  f << dumpJson(json{{"v", 3},
                      {"tool", doc.tool},
                      {"sid", doc.sessionId},
                      {"cwd", doc.cwd},
                      {"title", doc.title},
                      {"mtime", doc.mtime},
                      {"size", doc.size},
-                     {"ts", doc.ts}})
+                     {"ts", doc.ts},
+                     {"usage", usage}})
     << "\n";
   for (const auto& e : doc.entries) {
     f << dumpJson(json{{"r", e.role}, {"t", e.ts}, {"l", e.line}, {"x", e.text}}) << "\n";
@@ -237,13 +297,16 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
   std::string firstUser;
   size_t bytes = 0;
   int lineNo = 0;
+  std::unordered_set<std::string> seenUsage;  // claude 同一条消息会被写多行，只算一次
 
   forEachLine(src.path, [&](const std::string& line) {
     const int cur = lineNo++;
     if (line.size() < 8 || line.size() > kMaxLineBytes) return;
     // 先做便宜的字符串筛，避免为了几行元数据去解析整份 JSON
     const bool hasTitle = line.find("\"aiTitle\"") != std::string::npos;
-    if (!hasTitle && line.find("\"text\"") == std::string::npos) return;
+    const bool maybeUsage = line.find("\"usage\"") != std::string::npos ||
+                            line.find("\"rawUsage\"") != std::string::npos;
+    if (!hasTitle && !maybeUsage && line.find("\"text\"") == std::string::npos) return;
 
     json j;
     try {
@@ -259,6 +322,43 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
     }
 
     if (doc.cwd.empty()) doc.cwd = jstr(j, "cwd");
+
+    // token 用量：codebuddy 在 providerData.rawUsage（模型名也在这），claude 在 message.usage。
+    // 新版 codebuddy 两处都有，优先 rawUsage，否则模型名会丢，统计里全成 unknown
+    if (maybeUsage) {
+      json msg = jval(j, "message");
+      json pd = jval(j, "providerData");
+      json usage;
+      std::string model;
+      std::string uid;
+      if (pd.is_object() && pd.contains("rawUsage") && pd["rawUsage"].is_object()) {
+        usage = pd["rawUsage"];
+        model = jstr(pd, "model");
+        if (model.empty()) model = jstr(pd, "requestModelName");
+        uid = jstr(pd, "messageId");
+      } else if (msg.is_object() && msg.contains("usage") && msg["usage"].is_object()) {
+        usage = msg["usage"];
+        model = jstr(msg, "model");
+        uid = jstr(msg, "id");
+      }
+      if (model.empty() && pd.is_object()) model = jstr(pd, "model");
+      if (!usage.is_null() && usage.is_object() && !usage.empty()) {
+        if (uid.empty() || seenUsage.insert(uid).second) {
+          const std::string day = dayOf(jval(j, "timestamp"));
+          if (!day.empty()) {
+            UsageBucket* b = bucketFor(doc.usage, day, model.empty() ? "unknown" : model);
+            // 两家字段名不同，别同时加，否则有 input_tokens 的会算两遍
+            b->in += usage.contains("input_tokens") ? numOf(usage, "input_tokens")
+                                                    : numOf(usage, "prompt_tokens");
+            b->out += usage.contains("output_tokens") ? numOf(usage, "output_tokens")
+                                                      : numOf(usage, "completion_tokens");
+            b->cacheRead += numOf(usage, "cache_read_input_tokens");
+            b->cacheWrite += numOf(usage, "cache_creation_input_tokens");
+            b->calls += 1;
+          }
+        }
+      }
+    }
 
     // 两个 CLI 的格式不同：codebuddy 是 type=message + role，claude 是 type 就是角色
     const std::string type = jstr(j, "type");
@@ -321,6 +421,7 @@ void SearchIndex::loadIndexFiles() {
     Doc doc;
     std::string line;
     bool first = true;
+    bool oldVersion = false;
     while (std::getline(f, line)) {
       if (!line.empty() && line.back() == '\r') line.pop_back();
       if (line.empty()) continue;
@@ -332,6 +433,11 @@ void SearchIndex::loadIndexFiles() {
       }
       if (first) {
         first = false;
+        // 老版本索引没有 usage，直接不认，让下面的全量扫描重建一份
+        if (j.value("v", 0) != 3) {
+          oldVersion = true;
+          break;
+        }
         doc.tool = jstr(j, "tool");
         doc.sessionId = jstr(j, "sid");
         doc.cwd = jstr(j, "cwd");
@@ -339,6 +445,19 @@ void SearchIndex::loadIndexFiles() {
         doc.mtime = j.value("mtime", (int64_t)0);
         doc.size = j.value("size", (int64_t)0);
         doc.ts = j.value("ts", (int64_t)0);
+        if (j.contains("usage") && j["usage"].is_array()) {
+          for (const auto& u : j["usage"]) {
+            UsageBucket b;
+            b.day = jstr(u, "d");
+            b.model = jstr(u, "m");
+            b.in = numOf(u, "i");
+            b.out = numOf(u, "o");
+            b.cacheRead = numOf(u, "cr");
+            b.cacheWrite = numOf(u, "cw");
+            b.calls = static_cast<int>(numOf(u, "n"));
+            if (!b.day.empty()) doc.usage.push_back(std::move(b));
+          }
+        }
         continue;
       }
       Entry e;
@@ -348,6 +467,7 @@ void SearchIndex::loadIndexFiles() {
       e.text = jstr(j, "x");
       if (!e.text.empty()) doc.entries.push_back(std::move(e));
     }
+    if (oldVersion) continue;
     if (doc.sessionId.empty() || doc.entries.empty()) continue;
     {
       std::lock_guard<std::mutex> lk(mu_);
@@ -541,6 +661,25 @@ SessionDigest SearchIndex::digest(const std::string& tool, const std::string& si
   // 头尾挨着的时候不要重复取同一条：从 head 之后开始算尾部
   const int tailFrom = (std::max)(head, n - tailN);
   for (int i = tailFrom; i < n; ++i) out.tail.push_back(turn(d.entries[i]));
+  return out;
+}
+
+std::vector<DocUsage> SearchIndex::usageAll() const {
+  std::lock_guard<std::mutex> lk(mu_);
+  std::vector<DocUsage> out;
+  out.reserve(docs_.size());
+  for (const auto& kv : docs_) {
+    const Doc& d = kv.second;
+    if (d.usage.empty()) continue;
+    DocUsage u;
+    u.tool = d.tool;
+    u.sessionId = d.sessionId;
+    u.cwd = d.cwd;
+    u.title = d.title;
+    u.ts = d.ts;
+    u.buckets = d.usage;
+    out.push_back(std::move(u));
+  }
   return out;
 }
 

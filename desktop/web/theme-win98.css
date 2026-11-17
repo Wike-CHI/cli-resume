@@ -956,6 +956,47 @@ html[data-skin="win98"] .deep-head .mini-btn {
   white-space: nowrap;
 }
 
+/* ---------------- Token 统计 ---------------- */
+
+html[data-skin="win98"] .stat-card {
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+}
+html[data-skin="win98"] .stat-k,
+html[data-skin="win98"] .stat-h { color: #444; }
+html[data-skin="win98"] .stat-v { color: #000080; }
+html[data-skin="win98"] .stat-card:last-child .stat-v { color: #800080; }
+html[data-skin="win98"] .stat-chart,
+html[data-skin="win98"] .stat-panel {
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+}
+html[data-skin="win98"] .stat-panel h3 { color: #000080; font-size: 11px; letter-spacing: 0; }
+html[data-skin="win98"] .stat-row { border-top: 1px solid #dfdfdf; color: #000; }
+html[data-skin="win98"] .stat-row.head { color: #666; }
+html[data-skin="win98"] .stat-m { font-family: var(--ui); color: #000; }
+html[data-skin="win98"] .stat-n { color: #333; }
+html[data-skin="win98"] .stat-row .cost { color: #a05000; }
+html[data-skin="win98"] .seg.in { background: #000080; }
+html[data-skin="win98"] .seg.out { background: #800080; }
+html[data-skin="win98"] .seg.cache { background: #c0c0c0; }
+html[data-skin="win98"] .stat-legend { color: #333; }
+html[data-skin="win98"] .stat-sess { border-top: 1px solid #dfdfdf; }
+html[data-skin="win98"] .stat-sess-t { color: #000; }
+html[data-skin="win98"] .stat-sess-c { color: #666; }
+html[data-skin="win98"] .stat-note { color: #444; }
+html[data-skin="win98"] .stat-ranges .mini-btn.on { box-shadow: var(--sunken); font-weight: 700; }
+
+html[data-skin="win98"] .sess-exp {
+  font-family: var(--ui);
+  letter-spacing: 0;
+  color: #000080;
+  opacity: .55;
+}
+html[data-skin="win98"] .sess-exp:hover { color: #000080; border-color: transparent; text-decoration: underline; opacity: 1; }
+
 /* ---------------- 复盘 ---------------- */
 
 html[data-skin="win98"] .brief-card {

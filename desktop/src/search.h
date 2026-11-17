@@ -68,6 +68,27 @@ struct SessionDigest {
   std::vector<DigestTurn> tail;
 };
 
+// token 用量：按「本地日期 + 模型」分桶，统计页直接汇总，不用再读源文件。
+// claude 一条消息会写多行（每 block 一行）且 usage 重复，解析时按 message id 去重。
+struct UsageBucket {
+  std::string day;    // 2026-11-17（本地时区）
+  std::string model;  // 原始模型名，计价时按名字匹配
+  int64_t in = 0;
+  int64_t out = 0;
+  int64_t cacheRead = 0;
+  int64_t cacheWrite = 0;
+  int calls = 0;
+};
+
+struct DocUsage {
+  std::string tool;
+  std::string sessionId;
+  std::string cwd;
+  std::string title;
+  int64_t ts = 0;
+  std::vector<UsageBucket> buckets;
+};
+
 class SearchIndex {
  public:
   ~SearchIndex();
@@ -81,6 +102,9 @@ class SearchIndex {
   // 取一个会话的首尾若干条，喂给本地模型做「复盘」。
   // 走索引而不是重读源文件：索引里已经是抽好的正文，源文件动过才重建。
   SessionDigest digest(const std::string& tool, const std::string& sid, int headN, int tailN) const;
+
+  // 全部会话的 token 用量（只含每天每模型的小计），给统计页用
+  std::vector<DocUsage> usageAll() const;
 
   bool ready() const { return ready_.load(); }
   int files() const { return done_.load(); }
@@ -102,6 +126,7 @@ class SearchIndex {
     int64_t size = 0;
     int64_t ts = 0;
     std::vector<Entry> entries;
+    std::vector<UsageBucket> usage;
   };
 
   struct Src {

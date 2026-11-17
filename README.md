@@ -107,6 +107,21 @@ codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里
 <img src="desktop/docs/search.png" width="49%" alt="霓虹：全文搜索">
 <img src="desktop/docs/w98-search.png" width="49%" alt="98：全文搜索">
 
+## 导出与用量
+
+会话行右侧的「导出」把一次对话还原成 Markdown：标题、目录、时间范围、逐轮问答，
+工具调用收成引用行。文件落在 `文档\cli-resume\`，拿标题当文件名，重名自动加序号。
+搜索索引为了省内存把正文截到 700 字，导出走的是源 jsonl，全文都在。
+
+顶栏那个柱状图按钮是 token 统计：7 / 30 / 90 天，输入、输出、缓存读分开记，
+按模型和「最费 token 的会话」排行。用量是建索引时顺带抽出来的，打开就是结果，不重扫历史。
+
+成本只对查得到公开单价的模型估算（Claude 系），kimi / deepseek 这类订阅制模型只统计 token，
+表里显示「—」—— 编一个看似精确的数字比不显示更糟。
+
+<img src="desktop/docs/stats.png" width="49%" alt="霓虹：token 统计">
+<img src="desktop/docs/w98-stats.png" width="49%" alt="98：token 统计">
+
 ## 本地模型复盘
 
 每张目录卡片多了个「复盘」：把最近一次会话的头尾交给本机模型，回三行 —— **做了 / 卡在 / 下一步**。

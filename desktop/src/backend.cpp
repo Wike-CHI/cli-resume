@@ -276,10 +276,38 @@ void Backend::setupRoutes() {
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 
-  srv_.Post("/api/open", [this](const httplib::Request& req, httplib::Response& res) {
-    json out;
+  // ---------------- 统计与导出 ----------------
+  // 统计只看索引里现成的用量小计，不再扫源文件；索引没建完时先给已有部分
+  srv_.Get("/api/stats", [this](const httplib::Request& req, httplib::Response& res) {
+    int days = 30;
+    try {
+      if (req.has_param("days")) days = std::stoi(req.get_param_value("days"));
+    } catch (...) {
+    }
+    json out = buildStats(search_.usageAll(), days, search_.ready(), search_.files(),
+                          search_.totalFiles());
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/export", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
     try {
       json body = json::parse(req.body);
+      ExportResult r = exportSession(jstr(body, "tool"), jstr(body, "sid"), jstr(body, "cwd"),
+                                     jstr(body, "title"));
+      out = {{"ok", r.ok}, {"path", r.path}, {"error", r.error},
+             {"turns", r.turns}, {"bytes", r.bytes}};
+    } catch (const std::exception& e) {
+      out["error"] = std::string("请求解析失败：") + e.what();
+    }
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/open", [this](const httplib::Request& req, httplib::Response& res) {
+    json out;
+    try {      json body = json::parse(req.body);
       json items = jval(body, "items", json::array());
       std::vector<LaunchItem> list;
       if (items.is_array()) {

@@ -100,6 +100,14 @@ std::string actionScript(const std::string& act) {
     // 只展开第一个目录：截图里既能看到对话列表，也能看到下面几张未展开的卡片
     return "var c=document.querySelectorAll('.ws-card');if(c.length)c[0].click();";
   }
+  if (act == "export") {
+    // 点第一条会话的「导出」：验证前端动作链（示例模式下只会弹提示）
+    return "var b=document.querySelector('[data-export]');if(b)b.click();";
+  }
+  if (act == "stats") {
+    // 打开 token 统计视图：验证汇总数字与图表的渲染
+    return "document.getElementById('stats-btn').click();";
+  }
   if (act == "brief") {
     // 点第一个目录的「复盘」，验证本地模型链路和结果渲染
     return "var b=document.querySelector('[data-brief]');if(b)b.click();";

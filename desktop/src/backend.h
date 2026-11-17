@@ -5,8 +5,10 @@
 #include <string>
 
 #include "common.h"
+#include "exportmd.h"
 #include "httplib.h"
 #include "search.h"
+#include "stats.h"
 #include "summary.h"
 #include "terminal.h"
 
