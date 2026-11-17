@@ -137,6 +137,14 @@
           </select>
         </div>
         <div class="field">
+          <label>本地模型地址</label>
+          <input id="set-llm-url" type="text" spellcheck="false" placeholder="http://127.0.0.1:11434">
+        </div>
+        <div class="field">
+          <label>模型 <span class="hint">留空自动选</span></label>
+          <input id="set-llm-model" type="text" spellcheck="false" placeholder="qwen3:8b">
+        </div>
+        <div class="field">
           <label>排除规则 <span class="hint">一行一个</span></label>
           <textarea id="set-exclude" rows="3" spellcheck="false" placeholder="\node_modules\&#10;\Temp\\"></textarea>
         </div>

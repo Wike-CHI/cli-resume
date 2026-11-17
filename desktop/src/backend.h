@@ -7,6 +7,7 @@
 #include "common.h"
 #include "httplib.h"
 #include "search.h"
+#include "summary.h"
 #include "terminal.h"
 
 namespace crg {
@@ -39,6 +40,7 @@ class Backend {
   int port_ = 0;
   TermManager terms_;
   SearchIndex search_;
+  Summarizer summary_;
 
   std::mutex scanMu_;
   json cached_ = json::object();

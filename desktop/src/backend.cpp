@@ -43,6 +43,8 @@ json defaultSettings() {
       {"theme", "neon"},  // "neon"（80s CRT）| "win98"
       {"termMode", "embedded"},  // "embedded"（应用内终端）| "external"（Windows Terminal）
       {"restoreLayout", true},   // 启动时按上次的窗格铺开并自动 --resume
+      {"llmUrl", "http://127.0.0.1:11434"},  // 本地模型地址（Ollama / OpenAI 兼容都认）
+      {"llmModel", ""},                       // 留空自动挑（优先 qwen 系）
       {"exclude", json::array({"\\temp\\", "\\system32", "\\node_modules\\", "\\appdata\\local\\temp"})},
   };
 }
@@ -233,6 +235,43 @@ void Backend::setupRoutes() {
                 {"matches", r.totalMatches},
                 {"elapsedMs", r.elapsedMs},
                 {"hits", hits}};
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // ---------------- 本地模型复盘 ----------------
+  // 会话首尾交给本机模型，产出「做了 / 卡在 / 下一步」。模型可以是 Ollama，
+  // 也可以是任何 OpenAI 兼容服务（LM Studio、vLLM…），由 probe 自动判断。
+  srv_.Get("/api/llm", [this](const httplib::Request& req, httplib::Response& res) {
+    json s = loadSettings();
+    LlmStatus st = summary_.probe(jstr(s, "llmUrl"), jstr(s, "llmModel"), req.has_param("force"));
+    json out = {{"ok", st.ok},       {"api", st.api},   {"url", st.url},
+                {"model", st.model}, {"models", st.models}, {"error", st.error}};
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  srv_.Get("/api/summary", [this](const httplib::Request& req, httplib::Response& res) {
+    std::string tool = req.has_param("tool") ? req.get_param_value("tool") : "";
+    std::string sid = req.has_param("sid") ? req.get_param_value("sid") : "";
+    json s = loadSettings();
+    // 头部 2 条建立上下文，尾部 26 条交代进度
+    SessionDigest d = search_.digest(tool, sid, 2, 26);
+    json out = summary_.summarize(d, jstr(s, "llmUrl"), jstr(s, "llmModel"),
+                                  req.has_param("force"));
+    out["tool"] = tool;
+    out["sessionId"] = sid;
+
+    // 原始线索：模型没起来时前端拿它垫底，总比一个红叉有用
+    json turns = json::array();
+    const int n = static_cast<int>(d.tail.size());
+    const int from = n > 8 ? n - 8 : 0;
+    for (int i = from; i < n; ++i) {
+      turns.push_back({{"role", d.tail[i].role},
+                       {"text", utf8Truncate(d.tail[i].text, 260)},
+                       {"ts", d.tail[i].ts}});
+    }
+    out["turns"] = turns;
     res.set_header("Cache-Control", "no-store");
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
@@ -433,6 +472,7 @@ bool Backend::start() {
   setupRoutes();
   // 索引尽早开始建：第一次要通读几十上百个会话文件，早点跑完用户少等
   search_.start(dataDir_);
+  summary_.start(dataDir_);
   // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
   // 两三个终端再叠加页面请求就会排队
   srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };

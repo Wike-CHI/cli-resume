@@ -45,6 +45,29 @@ struct SearchReply {
   int entries = 0;     // 索引里有多少条消息
 };
 
+// 复盘素材：会话的头几条（establish 上下文）和最后几条（当前进度）。
+// 中间部分对「到哪一步了」没有价值，只会撑爆提示词。
+struct DigestTurn {
+  std::string role;  // "user" | "asst" | "tool"
+  std::string text;
+  int64_t ts = 0;
+};
+
+struct SessionDigest {
+  bool found = false;
+  bool ready = false;  // 索引是否已经建完（没建完时 found=false 可能只是还没扫到）
+  std::string cwd;
+  std::string title;
+  std::string tool;
+  std::string sessionId;
+  int64_t ts = 0;
+  int64_t mtime = 0;  // 源文件的大小/时间，用来判断摘要缓存是否过期
+  int64_t size = 0;
+  int totalEntries = 0;
+  std::vector<DigestTurn> head;
+  std::vector<DigestTurn> tail;
+};
+
 class SearchIndex {
  public:
   ~SearchIndex();
@@ -54,6 +77,10 @@ class SearchIndex {
   void stop();
 
   SearchReply query(const std::string& q, int limit) const;
+
+  // 取一个会话的首尾若干条，喂给本地模型做「复盘」。
+  // 走索引而不是重读源文件：索引里已经是抽好的正文，源文件动过才重建。
+  SessionDigest digest(const std::string& tool, const std::string& sid, int headN, int tailN) const;
 
   bool ready() const { return ready_.load(); }
   int files() const { return done_.load(); }

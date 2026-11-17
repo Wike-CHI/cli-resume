@@ -107,6 +107,20 @@ codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里
 <img src="desktop/docs/search.png" width="49%" alt="霓虹：全文搜索">
 <img src="desktop/docs/w98-search.png" width="49%" alt="98：全文搜索">
 
+## 本地模型复盘
+
+每张目录卡片多了个「复盘」：把最近一次会话的头尾交给本机模型，回三行 —— **做了 / 卡在 / 下一步**。
+早上打开电脑，不用通读几十条记录就知道昨天停在哪。数据不出机器。
+
+不用另外装框架：Ollama 的原生接口和任何 OpenAI 兼容服务（LM Studio、vLLM）都认，
+地址填进左栏，模型留空就自动挑。模型没起来时不装死 —— 照样列出最后几条原始记录，
+先把「上次在做什么」看明白，再去启动模型。
+
+摘要按会话文件缓存，文件没变就直接用，不重复推理。
+
+<img src="desktop/docs/brief.png" width="49%" alt="霓虹：会话复盘">
+<img src="desktop/docs/w98-brief.png" width="49%" alt="98：会话复盘">
+
 ## 它怎么知道你在哪些目录干过活
 
 两套 CLI 都把会话落在 `%USERPROFILE%` 下，格式还一样（jsonl，每条消息带 `cwd` 和 `sessionId`）：

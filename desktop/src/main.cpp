@@ -100,6 +100,10 @@ std::string actionScript(const std::string& act) {
     // 只展开第一个目录：截图里既能看到对话列表，也能看到下面几张未展开的卡片
     return "var c=document.querySelectorAll('.ws-card');if(c.length)c[0].click();";
   }
+  if (act == "brief") {
+    // 点第一个目录的「复盘」，验证本地模型链路和结果渲染
+    return "var b=document.querySelector('[data-brief]');if(b)b.click();";
+  }
   if (act == "enter") {
     // 展开第一个目录并点进第一条对话，验证「点一下就进去」这条路
     return "var c=document.querySelectorAll('.ws-card');if(c.length){c[0].click();"

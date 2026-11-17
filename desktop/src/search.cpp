@@ -506,4 +506,42 @@ SearchReply SearchIndex::query(const std::string& q, int limit) const {
   return r;
 }
 
+SessionDigest SearchIndex::digest(const std::string& tool, const std::string& sid, int headN,
+                                  int tailN) const {
+  SessionDigest out;
+  out.ready = ready_.load();
+  std::lock_guard<std::mutex> lk(mu_);
+  auto it = docs_.find(keyOf(tool, sid));
+  if (it == docs_.end()) return out;
+
+  const Doc& d = it->second;
+  out.found = true;
+  out.cwd = d.cwd;
+  out.title = d.title;
+  out.tool = d.tool;
+  out.sessionId = d.sessionId;
+  out.ts = d.ts;
+  out.mtime = d.mtime;
+  out.size = d.size;
+
+  const int n = static_cast<int>(d.entries.size());
+  out.totalEntries = n;
+  if (!n) return out;
+
+  auto turn = [](const Entry& e) {
+    DigestTurn t;
+    t.role = e.role;
+    t.text = e.text;
+    t.ts = e.ts;
+    return t;
+  };
+
+  const int head = (std::min)(headN, n);
+  for (int i = 0; i < head; ++i) out.head.push_back(turn(d.entries[i]));
+  // 头尾挨着的时候不要重复取同一条：从 head 之后开始算尾部
+  const int tailFrom = (std::max)(head, n - tailN);
+  for (int i = tailFrom; i < n; ++i) out.tail.push_back(turn(d.entries[i]));
+  return out;
+}
+
 }  // namespace crg

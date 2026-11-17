@@ -26,12 +26,15 @@ const S = {
     theme: 'neon',
     termMode: 'embedded',
     restoreLayout: true,
+    llmUrl: 'http://127.0.0.1:11434',
+    llmModel: '',
     exclude: [],
   },
   stats: {},
   roots: {},
   busy: false,
   deep: null,   // 全文搜索结果：null 表示当前是普通列表
+  brief: null,  // 本地模型复盘：null 表示没在这个视图
 };
 
 // 卡片展开后先显示这么多条，剩下的藏在「还有 N 个」后面
@@ -150,6 +153,8 @@ function applySettings(s) {
   if (tm) tm.value = S.settings.termMode === 'external' ? 'external' : 'embedded';
   const rs = $('set-restore');
   if (rs) rs.value = S.settings.restoreLayout === false ? '0' : '1';
+  if ($('set-llm-url')) $('set-llm-url').value = S.settings.llmUrl || '';
+  if ($('set-llm-model')) $('set-llm-model').value = S.settings.llmModel || '';
   $('set-exclude').value = (S.settings.exclude || []).join('\n');
   syncRangeButtons();
   applyTheme(FORCED_SKIN || S.settings.theme);
@@ -273,6 +278,7 @@ function itemHtml(w, index) {
         </div>
       </div>
       <div class="ws-side">
+        <button class="mini-btn brief" data-brief="${esc(w.cwd)}" title="让本地模型复盘这个目录最近一次会话">复盘</button>
         <button class="mini-btn" data-reveal="${esc(w.cwd)}" title="在资源管理器打开">定位</button>
         <button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>
         <span class="caret" title="${open ? '收起' : '展开对话列表'}"></span>
@@ -409,7 +415,155 @@ async function runDeepSearch(retry) {
   }
 }
 
+// ---------------- 本地模型复盘 ----------------
+// 把最近一次会话的头尾交给本机模型（Ollama 或 OpenAI 兼容），回「做了 / 卡在 / 下一步」。
+// 模型没起来时不装死：照样列出最后几条原文，至少能看出上次停在哪。
+
+const BRIEF_LABELS = ['做了', '卡在', '下一步', '进度', '待办', '阻塞'];
+
+function openBrief(cwd) {
+  const w = S.byId.get(String(cwd).toLowerCase());
+  if (!w || !(w.sessions || []).length) {
+    toast('这个目录还没有对话', true);
+    return;
+  }
+  const s = w.sessions[0];  // sessions 已按时间倒序，第一条就是最近那次
+  S.brief = {
+    cwd: w.cwd, name: w.name, tool: s.tool, sid: s.sessionId,
+    title: s.title || w.name, loading: true, data: null, error: '',
+  };
+  render();
+  fetchBrief(false);
+}
+
+async function fetchBrief(force) {
+  const b = S.brief;
+  if (!b) return;
+  b.loading = true;
+  b.error = '';
+  render();
+
+  if (DEMO) {
+    await new Promise((r) => setTimeout(r, 700));
+    if (S.brief !== b) return;
+    b.loading = false;
+    b.data = {
+      ok: true, llmOk: true, api: 'ollama', model: 'qwen3:8b', cached: false,
+      elapsedMs: 1840, entries: 35, turns: [],
+      text: '做了：把 BSR 渲染改成流式输出，补了 3 个回归用例。\n' +
+        '卡在：旧版 Safari 首屏仍有 200ms 白屏，没定位到是字体还是合成层。\n' +
+        '下一步：先加一帧骨架屏兜住，再单独排查 Safari 的图层。',
+    };
+    render();
+    return;
+  }
+
+  try {
+    const u = `/api/summary?tool=${encodeURIComponent(b.tool)}&sid=${encodeURIComponent(b.sid)}` +
+      (force ? '&force=1' : '');
+    const r = await fetch(u).then((x) => x.json());
+    if (S.brief !== b) return;  // 等的时候已经切走了
+    b.data = r;
+    b.loading = false;
+    if (!r.ok) b.error = r.error || '没拿到这个会话';
+  } catch (e) {
+    if (S.brief !== b) return;
+    b.loading = false;
+    b.error = e.message;
+  }
+  render();
+}
+
+// 模型偶尔会加粗、加序号，这里按行拆，认出「做了：」这类前缀就给个标签
+function briefLines(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((s) => s.replace(/^[\s*·\-]+/, '').trim())
+    .filter(Boolean)
+    .map((line) => {
+      const m = line.match(/^([^：:]{1,6})[：:]\s*(.+)$/);
+      if (m && BRIEF_LABELS.includes(m[1].trim())) return { k: m[1].trim(), v: m[2] };
+      return { k: '', v: line };
+    });
+}
+
+function briefTurns(turns) {
+  return (turns || []).map((t) => `
+    <div class="brief-turn">
+      <span class="hit-role ${esc(t.role)}">${roleLabel(t.role)}</span>
+      <span class="brief-turn-text">${esc(t.text)}</span>
+    </div>`).join('');
+}
+
+function renderBrief() {
+  const b = S.brief;
+  const d = b.data || {};
+  const head = `
+    <div class="deep-head">
+      <span class="deep-q">复盘 · ${esc(b.name || b.cwd)}</span>
+      <span class="deep-sub">${esc(b.title)}${d.entries ? ` · ${d.entries} 条消息` : ''}${
+        d.cached ? ' · 缓存' : ''}</span>
+      <button class="mini-btn" data-back="1">返回列表</button>
+    </div>`;
+
+  let body = '';
+  if (b.loading) {
+    body = `<div class="brief-wrap"><div class="brief-card">
+      <div class="brief-wait"><i class="brief-dot"></i><i class="brief-dot"></i><i class="brief-dot"></i>
+        <span>本地模型正在读这个会话…首次调用要等模型加载，可能十几秒</span></div>
+    </div></div>`;
+  } else if (b.error) {
+    body = `<div class="brief-wrap"><div class="brief-card bad">
+      <p>${esc(b.error)}</p>
+      <p class="brief-hint">索引可能还在建，稍等片刻点「重新生成」。</p>
+    </div></div>`;
+  } else if (!d.llmOk) {
+    body = `<div class="brief-wrap">
+      <div class="brief-card warn">
+        <h3>本地模型没连上</h3>
+        <p>${esc(d.llmError || '没有可用的模型')}</p>
+        <p class="brief-hint">在左栏「本地模型地址 / 模型」里填本机服务，Ollama 默认
+          <code>http://127.0.0.1:11434</code>，LM Studio 是 <code>http://127.0.0.1:1234</code>。
+          下面是最后几条原始记录，先凑合看。</p>
+      </div>
+      <div class="brief-card">
+        <h3 class="brief-sub">最近几条</h3>
+        ${briefTurns(d.turns) || '<p class="brief-hint">索引里还没有这个会话的正文。</p>'}
+      </div>
+    </div>`;
+  } else {
+    const rows = briefLines(d.text).map((x) => `
+      <div class="brief-line${x.k ? ' key' : ''}"${x.k ? ` data-k="${esc(x.k)}"` : ''}>
+        ${x.k ? `<span class="brief-k">${esc(x.k)}</span>` : ''}
+        <span class="brief-v">${esc(x.v)}</span>
+      </div>`).join('');
+    body = `<div class="brief-wrap">
+      <div class="brief-card">
+        <div class="brief-lines">${rows}</div>
+        <div class="brief-foot">
+          <span class="brief-meta">${esc(d.model || '')}${d.api ? ` · ${esc(d.api)}` : ''}${
+            d.cached ? ' · 来自缓存' : ` · ${d.elapsedMs || 0} ms`}</span>
+          <button class="mini-btn" data-brief-redo="1">重新生成</button>
+          <button class="mini-btn go" data-brief-enter="1">进入这个会话</button>
+        </div>
+      </div>
+      ${d.turns && d.turns.length ? `<details class="brief-raw">
+        <summary>看原始记录（最近 ${d.turns.length} 条）</summary>
+        ${briefTurns(d.turns)}
+      </details>` : ''}
+    </div>`;
+  }
+
+  listEl.innerHTML = head + body;
+  $('meta').textContent = b.loading ? '复盘生成中…' : `复盘 · ${b.name || b.cwd}`;
+  updateBar();
+}
+
 function render() {
+  if (S.brief) {
+    renderBrief();
+    return;
+  }
   if (S.deep) {
     renderDeep();
     return;
@@ -476,7 +630,30 @@ listEl.addEventListener('click', (e) => {
   const back = e.target.closest('[data-back]');
   if (back) {
     S.deep = null;
+    S.brief = null;
     render();
+    return;
+  }
+
+  // 复盘：让本地模型读一遍这个目录最近一次会话
+  const briefBtn = e.target.closest('[data-brief]');
+  if (briefBtn) {
+    e.stopPropagation();
+    openBrief(briefBtn.dataset.brief);
+    return;
+  }
+
+  if (e.target.closest('[data-brief-redo]')) {
+    fetchBrief(true);
+    return;
+  }
+
+  const briefEnter = e.target.closest('[data-brief-enter]');
+  if (briefEnter && S.brief) {
+    launchItems([{
+      cwd: S.brief.cwd, tool: S.brief.tool,
+      sessionId: S.brief.sid, title: S.brief.title,
+    }], 1);
     return;
   }
 
@@ -743,7 +920,9 @@ $('set-save').addEventListener('click', async () => {
   const win = Number($('set-window').value);
   const termMode = $('set-term') ? $('set-term').value : 'embedded';
   const restoreLayout = !$('set-restore') || $('set-restore').value !== '0';
-  await saveSettings({ exclude, maxAgeHours, window: win, termMode, restoreLayout });
+  const llmUrl = $('set-llm-url') ? $('set-llm-url').value.trim() : S.settings.llmUrl;
+  const llmModel = $('set-llm-model') ? $('set-llm-model').value.trim() : S.settings.llmModel;
+  await saveSettings({ exclude, maxAgeHours, window: win, termMode, restoreLayout, llmUrl, llmModel });
   S.range = maxAgeHours;
   S.rangeTouched = true;
   syncRangeButtons();
@@ -1176,6 +1355,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
+    if (S.brief) {
+      S.brief = null;
+      render();
+      return;
+    }
     if (S.deep) {
       S.deep = null;
       render();

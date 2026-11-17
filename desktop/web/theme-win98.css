@@ -338,6 +338,7 @@ html[data-skin="win98"] .field > label {
 html[data-skin="win98"] .field .hint { color: #666; font-size: 10px; }
 
 html[data-skin="win98"] .field select,
+html[data-skin="win98"] .field input[type="text"],
 html[data-skin="win98"] .field textarea {
   border: 0;
   padding: 2px 3px;
@@ -362,6 +363,7 @@ html[data-skin="win98"] .field textarea::-webkit-scrollbar-thumb {
   box-shadow: var(--raise);
 }
 html[data-skin="win98"] .field select:focus,
+html[data-skin="win98"] .field input[type="text"]:focus,
 html[data-skin="win98"] .field textarea:focus {
   border: 0;
   box-shadow: var(--sunken);
@@ -881,7 +883,7 @@ html[data-skin="win98"] .term-tab.on {
 }
 html[data-skin="win98"] .term-tab.dead { color: #666; box-shadow: var(--raise); }
 
-html[data-skin="win98"] .mini-btn {
+html[data-skin="win98"] .term-tools .mini-btn {
   width: 20px;
   height: 18px;
   border: 0;
@@ -891,8 +893,8 @@ html[data-skin="win98"] .mini-btn {
   font-family: var(--ui);
   font-size: 11px;
 }
-html[data-skin="win98"] .mini-btn:hover { background: #c0c0c0; color: #000; }
-html[data-skin="win98"] .mini-btn:active { box-shadow: var(--sunken); }
+html[data-skin="win98"] .term-tools .mini-btn:hover { background: #c0c0c0; color: #000; }
+html[data-skin="win98"] .term-tools .mini-btn:active { box-shadow: var(--sunken); }
 
 html[data-skin="win98"] .term-grid { gap: 2px; background: #808080; }
 
@@ -953,6 +955,47 @@ html[data-skin="win98"] .deep-head .mini-btn {
   display: inline-flex;
   white-space: nowrap;
 }
+
+/* ---------------- 复盘 ---------------- */
+
+html[data-skin="win98"] .brief-card {
+  border: none;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  padding: 12px;
+}
+html[data-skin="win98"] .brief-card.warn { background: #ffffe1; }
+html[data-skin="win98"] .brief-card.bad { background: #ffecec; }
+html[data-skin="win98"] .brief-card h3 { color: #000080; font-size: 12px; letter-spacing: 0; }
+html[data-skin="win98"] .brief-card p { color: #000; font-size: 12px; }
+html[data-skin="win98"] .brief-card code { color: #000080; font-family: var(--ui); }
+html[data-skin="win98"] .brief-hint { color: #444; }
+html[data-skin="win98"] .brief-v { color: #000; font-size: 12px; }
+html[data-skin="win98"] .brief-k {
+  border: 0;
+  box-shadow: var(--raise);
+  background: #c0c0c0;
+  color: #000080;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+html[data-skin="win98"] .brief-line[data-k="卡在"] .brief-k { color: #a05000; }
+html[data-skin="win98"] .brief-line[data-k="下一步"] .brief-k { color: #800080; }
+html[data-skin="win98"] .brief-foot { border-top: 1px solid var(--face-lo); }
+html[data-skin="win98"] .brief-meta { color: #444; font-family: var(--ui); }
+html[data-skin="win98"] .brief-foot .mini-btn {
+  width: auto;
+  height: 22px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+html[data-skin="win98"] .brief-wait { color: #000; font-size: 12px; }
+html[data-skin="win98"] .brief-dot { background: #000080; }
+html[data-skin="win98"] .brief-raw { border: 0; background: #ffffff; box-shadow: var(--sunken); }
+html[data-skin="win98"] .brief-raw summary { font-family: var(--ui); color: #000080; font-size: 11px; }
+html[data-skin="win98"] .brief-turn { border-top: 1px solid #dfdfdf; }
+html[data-skin="win98"] .brief-turn-text { color: #000; font-size: 11.5px; }
 
 /* 结果按「一屏白纸」处理：外面一圈凹陷，组头是灰的，选中行整条反白 */
 html[data-skin="win98"] .hit-group {
