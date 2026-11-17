@@ -9,10 +9,18 @@
 
 <img src="desktop/docs/desktop.png" width="49%" alt="80s 霓虹皮肤">
 <img src="desktop/docs/w98-desktop.png" width="49%" alt="Windows 98 皮肤">
+<img src="desktop/docs/amber.png" width="49%" alt="70s 琥珀终端皮肤">
+<img src="desktop/docs/xp.png" width="49%" alt="Windows XP Luna 皮肤">
 
-桌面端有两套皮肤，顶栏一个按钮切换：80 年代合成器浪潮（紫黑底、青与品红双霓虹、CRT 扫描线、
-网格地平线）和 Windows 98（灰面板、四层 1px 立体线、深蓝选中、宋体小字、16px 经典滚动条）。
-选择记在 `settings.json` 里，下次启动就是上次那套。
+桌面端有四套皮肤，顶栏那个按钮循环切换：
+
+- **80s 霓虹 CRT**：紫黑底、青与品红双霓虹、扫描线、网格地平线
+- **70s 琥珀终端**：P3 荧光粉的单色橙黄，没有彩色，只有亮暗；等宽字体、方形控件
+- **Windows 98**：灰面板、四层 1px 立体线、深蓝选中、宋体小字、16px 经典滚动条
+- **Windows XP Luna**：蓝渐变标题栏、米黄客户区、圆角渐变按钮、Tahoma
+
+选择记在 `settings.json` 里，下次启动就是上次那套。任何程序里按 **Ctrl+Shift+Space** 都能把窗口
+拉出来，再按一次收起 —— 不用去任务栏找。
 
 ## 两种形态，同一套思路
 

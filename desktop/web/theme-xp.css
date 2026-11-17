@@ -1,0 +1,1386 @@
+/* ------------------------------------------------------------------
+   CLI//RESUME — Windows XP Luna
+   ------------------------------------------------------------------
+   选择器和 98 那套一致（同一份 DOM），换的是材质：
+
+   1. 98 的立体感是四层 1px 硬线；XP 是「一条 1px 边框 + 竖向渐变 + 圆角」，
+      所以 --raise / --sunken 在这套里退化成两条细边，形状靠后面的造型段补。
+   2. 标题栏是 Luna 蓝渐变（#0058e6 → #3a93f5），白字；
+      客户区是那个熟悉的米黄 #ece9d8。
+   3. 选中色是 #316ac5，控件圆角 3px，字体 Tahoma 8.25pt / 宋体 12px。
+------------------------------------------------------------------ */
+
+html[data-skin="xp"] {
+  --raise: inset 0 0 0 1px #ffffff, 0 0 0 1px #919b9c;
+  --sunken: inset 0 0 0 1px #7f9db9;
+
+  --face: #ece9d8;
+  --face-hi: #f7f5ef;
+  --face-lo: #aca899;
+  --navy: #0054e3;
+
+  --void: #3f7cc4;
+  --ink: #ece9d8;
+  --panel: #ece9d8;
+  --panel-hi: #f7f5ef;
+
+  --line: #aca899;
+  --line-soft: #d5d2c4;
+  --line-hot: #0054e3;
+
+  --cyan: #0054e3;
+  --magenta: #a00000;
+  --violet: #5a3ea8;
+  --amber: #8a6d00;
+  --lime: #007a00;
+
+  --text: #000000;
+  --muted: #4a4a4a;
+  --faint: #6f6f6f;
+
+  --ui: "Tahoma", "Segoe UI", "SimSun", "Microsoft YaHei UI", sans-serif;
+  --mono: "Lucida Console", "Consolas", "SimSun", monospace;
+
+  --glow-cyan: none;
+  --glow-mag: none;
+  --cut: none;
+  --cut-sm: none;
+}
+
+/* ---------------- 机身 ---------------- */
+
+html[data-skin="xp"] body {
+  background: #008080;
+  font-size: 12px;
+}
+
+html[data-skin="xp"] .crt {
+  background: #ece9d8;
+}
+
+/* 扫描线、滚动光带、暗角、透视网格，全是 CRT 的东西 */
+html[data-skin="xp"] .crt::before,
+html[data-skin="xp"] .crt::after,
+html[data-skin="xp"] .crt-lines,
+html[data-skin="xp"] .crt-roll {
+  display: none;
+}
+
+/* ---------------- 顶栏：做成菜单栏 ---------------- */
+
+html[data-skin="xp"] .topbar {
+  gap: 14px;
+  padding: 3px 7px;
+  background: #ece9d8;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 #aca899, inset 0 -2px 0 #ffffff;
+}
+html[data-skin="xp"] .topbar::after { display: none; }
+
+html[data-skin="xp"] .logo {
+  width: 22px;
+  height: 22px;
+  color: #0054e3;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="xp"] .logo svg { width: 15px; height: 15px; }
+
+html[data-skin="xp"] .brand-text h1 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="xp"] .brand-text h1 i {
+  color: #0054e3;
+  text-shadow: none;
+  padding: 0;
+}
+/* 窗口标题栏里已经有「终端现场」，菜单栏不重复 */
+html[data-skin="xp"] .brand-text p { display: none; }
+
+html[data-skin="xp"] .status {
+  /* 1fr 列默认拉伸，会变成横贯顶栏的一条灰带；98 里状态灯就一小块 */
+  justify-self: center;
+  gap: 7px;
+  padding: 2px 10px;
+  background: #ece9d8;
+  box-shadow: inset 1px 1px #aca899, inset -1px -1px #ffffff;
+}
+
+/* 98 的指示灯是方的，而且不呼吸，硬闪 */
+html[data-skin="xp"] .lamp {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  box-shadow: none !important;
+  border: 1px solid #404040;
+}
+html[data-skin="xp"] .lamp.pwr { background: #00a000; }
+html[data-skin="xp"] .lamp.act {
+  background: #c00000;
+  animation: w98-blink 1.4s steps(1) infinite;
+}
+@keyframes w98-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .2; }
+}
+
+html[data-skin="xp"] .clock {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+
+/* ---------------- 搜索框与按钮 ---------------- */
+
+html[data-skin="xp"] .search {
+  height: 22px;
+  gap: 4px;
+  padding: 0 4px 0 5px;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="xp"] .search .prompt {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #aca899;
+  text-shadow: none;
+}
+html[data-skin="xp"] .search input {
+  width: 176px;
+  font-family: var(--ui);
+  font-size: 12px;
+  color: #000;
+  letter-spacing: 0;
+}
+html[data-skin="xp"] .search input::placeholder { color: #aca899; }
+html[data-skin="xp"] .search:focus-within { box-shadow: var(--sunken); }
+
+html[data-skin="xp"] .kbd {
+  border: 0;
+  padding: 0 3px;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+html[data-skin="xp"] .icon-btn {
+  width: 23px;
+  height: 22px;
+  background: #ece9d8;
+  border: 0;
+  box-shadow: var(--raise);
+  color: #000;
+  clip-path: none;
+}
+html[data-skin="xp"] .icon-btn:hover {
+  background: #ece9d8;
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .icon-btn:active {
+  transform: none;
+  box-shadow: var(--sunken);
+  padding: 1px 0 0 1px;
+}
+
+/* ---------------- 左栏 ---------------- */
+
+html[data-skin="xp"] .body { grid-template-columns: 238px 1fr; }
+
+html[data-skin="xp"] .rail {
+  gap: 7px;
+  padding: 6px 6px 4px;
+  background: #ece9d8;
+  border-right: 0;
+  /* 右边缘刻一道：左边亮、右边暗 */
+  box-shadow: inset -1px 0 0 #aca899, inset -2px 0 0 #ffffff;
+  backdrop-filter: none;
+}
+
+html[data-skin="xp"] .rail-hd {
+  padding: 1px 2px 0;
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="xp"] .rail-hd i {
+  height: 2px;
+  background: #aca899;
+  box-shadow: 0 1px 0 #ffffff;
+}
+
+/* 分组框：上左暗、下右亮，刻进去一道 */
+html[data-skin="xp"] .rail-sec {
+  gap: 5px;
+  padding: 5px 6px 7px;
+  background: #ece9d8;
+  box-shadow: inset 1px 1px #aca899, inset -1px -1px #ffffff;
+}
+html[data-skin="xp"] .rail-sec h3 {
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #000;
+}
+
+/* 时间范围：98 的单选组，圈是凹陷的白圆，选中填一个蓝点 */
+html[data-skin="xp"] .seg { gap: 1px; }
+html[data-skin="xp"] .seg button {
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 2px 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0;
+  clip-path: none;
+}
+html[data-skin="xp"] .seg button::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: inset -1px -1px #ffffff, inset 1px 1px #aca899, inset -2px -2px #f7f5ef, inset 2px 2px #404040;
+}
+html[data-skin="xp"] .seg button:hover { color: #000; border: 0; }
+html[data-skin="xp"] .seg button em {
+  margin-left: auto;
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #666;
+}
+html[data-skin="xp"] .seg button.on {
+  color: #000;
+  font-weight: 700;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+}
+html[data-skin="xp"] .seg button.on::before {
+  background: radial-gradient(circle at 50% 50%, #0054e3 0 2.5px, #ffffff 2.6px);
+}
+html[data-skin="xp"] .seg button.on em { color: #0054e3; }
+
+/* 设置区高亮：98 没有光，用一圈深蓝表示「现在是它」 */
+html[data-skin="xp"] .rail-sec#drawer {
+  padding: 5px 6px 7px;
+  border: 0;
+  clip-path: none;
+}
+html[data-skin="xp"] .rail-sec#drawer.on {
+  background: #ece9d8;
+  box-shadow:
+    inset 1px 1px #aca899,
+    inset -1px -1px #ffffff,
+    0 0 0 1px #0054e3;
+}
+
+html[data-skin="xp"] .mini-x {
+  font-family: var(--ui);
+  font-size: 11px;
+  line-height: 1;
+  color: #000;
+  padding: 0 3px;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .mini-x:hover { color: #000; }
+
+html[data-skin="xp"] .field { gap: 3px; }
+html[data-skin="xp"] .field > label {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: #000;
+}
+html[data-skin="xp"] .field .hint { color: #666; font-size: 10px; }
+
+html[data-skin="xp"] .field select,
+html[data-skin="xp"] .field input[type="text"],
+html[data-skin="xp"] .field textarea {
+  border: 0;
+  padding: 2px 3px;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+}
+html[data-skin="xp"] .field textarea {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+/* 左栏太窄，用 12px 滚动条而不是 16px，否则挤掉一行字 */
+html[data-skin="xp"] .field textarea::-webkit-scrollbar { width: 12px; }
+html[data-skin="xp"] .field textarea::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ffffff 0% 25%, #ece9d8 0% 50%) 0 0 / 2px 2px;
+}
+html[data-skin="xp"] .field textarea::-webkit-scrollbar-thumb {
+  background: #ece9d8;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .field select:focus,
+html[data-skin="xp"] .field input[type="text"]:focus,
+html[data-skin="xp"] .field textarea:focus {
+  border: 0;
+  box-shadow: var(--sunken);
+  outline: 1px dotted #000;
+  outline-offset: -3px;
+}
+
+/* 环境自检 */
+html[data-skin="xp"] .doctor { gap: 4px; }
+html[data-skin="xp"] .doc-row {
+  font-size: 10px;
+  line-height: 1.45;
+  color: #000;
+}
+html[data-skin="xp"] .doc-row .mark.ok { color: #008000; text-shadow: none; }
+html[data-skin="xp"] .doc-row .mark.bad { color: #c00000; text-shadow: none; }
+html[data-skin="xp"] .doc-row span.txt {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: #333;
+  line-height: 1.45;
+}
+
+html[data-skin="xp"] .rail-foot {
+  padding: 5px 2px 3px;
+  border-top: 0;
+  background: transparent;
+  box-shadow: inset 0 1px 0 #aca899, inset 0 2px 0 #ffffff;
+  font-family: var(--ui);
+  font-size: 9.5px;
+  letter-spacing: 0;
+  color: #555;
+}
+html[data-skin="xp"] .rail-foot b {
+  color: #000;
+  font-weight: 700;
+}
+
+/* ---------------- 主屏幕：白色凹陷的列表视图 ---------------- */
+
+html[data-skin="xp"] .screen {
+  background: #ece9d8;
+}
+
+/* 列标题条 */
+html[data-skin="xp"] .screen-hd {
+  height: 21px;
+  padding: 0 6px;
+  border-bottom: 0;
+  background: #ece9d8;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -1px 0 #aca899;
+}
+html[data-skin="xp"] .screen-hd::after { display: none; }
+html[data-skin="xp"] .screen-hd .cmd {
+  /* 这一行本来就是命令，用等宽更像在控制台里 */
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+}
+html[data-skin="xp"] .screen-hd .meta {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #000;
+  opacity: 1;
+}
+
+html[data-skin="xp"] .list {
+  gap: 0;
+  margin: 3px 3px 3px 4px;
+  /* 右边多留一点：卡片上的按钮不该贴着滚动条 */
+  padding: 2px 5px 2px 2px;
+  background: #ffffff;
+  background-image: none;
+  box-shadow: var(--sunken);
+}
+
+/* 滚动条：98 的 16px 灰槽 + 点阵底纹 + 凸起滑块 */
+html[data-skin="xp"] .rail::-webkit-scrollbar,
+html[data-skin="xp"] .list::-webkit-scrollbar { width: 16px; height: 16px; }
+html[data-skin="xp"] .rail::-webkit-scrollbar-track,
+html[data-skin="xp"] .list::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ffffff 0% 25%, #ece9d8 0% 50%) 0 0 / 2px 2px;
+}
+html[data-skin="xp"] .rail::-webkit-scrollbar-thumb,
+html[data-skin="xp"] .list::-webkit-scrollbar-thumb {
+  background: #ece9d8;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .rail::-webkit-scrollbar-thumb:hover,
+html[data-skin="xp"] .list::-webkit-scrollbar-thumb:hover { background: #ece9d8; }
+
+/* ---------------- 目录条目 ---------------- */
+
+html[data-skin="xp"] .ws-card {
+  gap: 7px;
+  padding: 3px 6px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  clip-path: none;
+  color: #000;
+}
+html[data-skin="xp"] .ws-card::before { display: none; }
+
+html[data-skin="xp"] .ws-card:hover { background: #e4e4f4; box-shadow: none; }
+html[data-skin="xp"] .ws-card.sel { background: #0054e3; box-shadow: none; }
+
+html[data-skin="xp"] .ws-no {
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #aca899;
+  padding: 0;
+  border: 0;
+}
+html[data-skin="xp"] .ws-card:hover .ws-no { color: #aca899; border: 0; }
+html[data-skin="xp"] .ws-card.sel .ws-no { color: #b0b0e0; border: 0; }
+
+/* 勾选框：白底凹陷的小方块，勾是黑的 */
+html[data-skin="xp"] .ws-check,
+html[data-skin="xp"] .sel-all input,
+html[data-skin="xp"] .chip-opt input {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+}
+html[data-skin="xp"] .ws-check:hover,
+html[data-skin="xp"] .sel-all input:hover,
+html[data-skin="xp"] .chip-opt input:hover {
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="xp"] .ws-check:checked,
+html[data-skin="xp"] .sel-all input:checked,
+html[data-skin="xp"] .chip-opt input:checked {
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="xp"] .ws-check:checked::after,
+html[data-skin="xp"] .sel-all input:checked::after,
+html[data-skin="xp"] .chip-opt input:checked::after {
+  width: 3px;
+  height: 6px;
+  border: solid #000;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -2px);
+}
+html[data-skin="xp"] .sel-all input:indeterminate {
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+}
+html[data-skin="xp"] .sel-all input:indeterminate::after { background: #000; }
+
+html[data-skin="xp"] .ws-name {
+  font-family: var(--ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="xp"] .ws-card.sel .ws-name { color: #ffffff; }
+
+html[data-skin="xp"] .ws-path {
+  font-family: var(--ui);
+  font-size: 11px;
+  color: #666;
+}
+html[data-skin="xp"] .ws-card.sel .ws-path { color: #c0c0f0; }
+
+html[data-skin="xp"] .ws-sub {
+  margin-top: 2px;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #444;
+}
+html[data-skin="xp"] .ws-card.sel .ws-sub { color: #d8d8ff; }
+
+html[data-skin="xp"] .tool-chip {
+  gap: 3px;
+  padding: 0 4px;
+  background: #ece9d8;
+  border: 0;
+  box-shadow: var(--raise);
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+  color: #000;
+  opacity: 1;
+}
+html[data-skin="xp"] .tool-chip i { width: 5px; height: 5px; }
+html[data-skin="xp"] .tool-chip.cb { color: #0054e3; }
+html[data-skin="xp"] .tool-chip.cl { color: #800000; }
+html[data-skin="xp"] .ws-card.sel .tool-chip,
+html[data-skin="xp"] .ws-card.sel .tool-chip.cb,
+html[data-skin="xp"] .ws-card.sel .tool-chip.cl { color: #000; }
+
+html[data-skin="xp"] .dot-sep { color: #a0a0a0; }
+html[data-skin="xp"] .ws-card.sel .dot-sep { color: #8080c0; }
+html[data-skin="xp"] .ws-when { color: #444; }
+html[data-skin="xp"] .ws-card.sel .ws-when { color: #d8d8ff; }
+html[data-skin="xp"] .ws-count { color: #666; }
+html[data-skin="xp"] .ws-card.sel .ws-count { color: #c0c0f0; }
+html[data-skin="xp"] .ws-latest { color: #666; font-size: 10.5px; }
+html[data-skin="xp"] .ws-card.sel .ws-latest { color: #c0c0f0; }
+
+html[data-skin="xp"] .mini-btn {
+  height: 19px;
+  padding: 0 6px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  opacity: 1;
+}
+html[data-skin="xp"] .ws-card:hover .mini-btn { opacity: 1; }
+html[data-skin="xp"] .mini-btn:hover {
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .mini-btn:active { box-shadow: var(--sunken); }
+html[data-skin="xp"] .mini-btn.go {
+  color: #000;
+  font-weight: 700;
+  border: 0;
+  opacity: 1;
+}
+html[data-skin="xp"] .mini-btn.go:hover {
+  background: #ece9d8;
+  color: #000;
+  border: 0;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .mini-btn.go:active { box-shadow: var(--sunken); }
+
+/* 展开箭头：换回树形控件的 +/− 小方块。
+   十字用两层背景渐变画，靠 center 对齐，比绝对定位的伪元素稳。 */
+html[data-skin="xp"] .caret {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: 0;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(#000, #000),
+    linear-gradient(#000, #000);
+  background-size: 5px 1px, 1px 5px;
+  background-position: center, center;
+  background-repeat: no-repeat;
+  box-shadow: inset -1px -1px #ffffff, inset 1px 1px #aca899, inset -2px -2px #f7f5ef, inset 2px 2px #404040;
+}
+html[data-skin="xp"] .ws-card:hover .caret { border: 0; }
+html[data-skin="xp"] .ws-item.open .caret {
+  transform: none;
+  border: 0;
+  /* 展开后只剩横线，就是减号 */
+  background-image: linear-gradient(#000, #000);
+  background-size: 5px 1px;
+}
+
+/* ---------------- 展开后的对话列表 ---------------- */
+
+html[data-skin="xp"] .sess-panel {
+  margin: 2px 0 3px 22px;
+  padding: 0 0 2px;
+  border-left: 1px dotted #aca899;
+  background: transparent;
+}
+
+html[data-skin="xp"] .sess-row {
+  gap: 6px;
+  padding: 2px 6px;
+  border-bottom: 0;
+  font-size: 11.5px;
+  color: #000;
+}
+html[data-skin="xp"] .sess-row:hover {
+  background: #0054e3;
+  color: #ffffff;
+  box-shadow: none;
+}
+html[data-skin="xp"] .sess-row:hover .sess-when { color: #c0c0f0; }
+html[data-skin="xp"] .sess-row:hover .sess-go { color: #ffffff; }
+
+html[data-skin="xp"] .tool-dot {
+  width: 7px;
+  height: 7px;
+  transform: none;
+  border: 0;
+  box-shadow: none;
+}
+html[data-skin="xp"] .tool-dot.cb { background: #0054e3; }
+html[data-skin="xp"] .tool-dot.cl { background: #800000; }
+html[data-skin="xp"] .sess-row:hover .tool-dot.cb,
+html[data-skin="xp"] .sess-row:hover .tool-dot.cl { background: #ffffff; }
+
+html[data-skin="xp"] .sess-when {
+  font-family: var(--ui);
+  font-size: 10.5px;
+  color: #666;
+}
+
+/* 98 里「进入」更像一个链接：深蓝带下划线 */
+html[data-skin="xp"] .sess-go {
+  padding: 0;
+  border: 0;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #0054e3;
+  text-decoration: underline;
+  opacity: 1;
+}
+html[data-skin="xp"] .sess-row:hover .sess-go { box-shadow: none; }
+
+html[data-skin="xp"] .more-btn {
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #0054e3;
+  text-decoration: underline;
+  padding: 1px 0;
+}
+html[data-skin="xp"] .more-btn:hover { color: #0054e3; text-shadow: none; }
+
+/* ---------------- 空态与骨架 ---------------- */
+
+html[data-skin="xp"] .empty {
+  max-width: 380px;
+  padding: 12px 14px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+  clip-path: none;
+  font-family: var(--ui);
+  color: #000;
+}
+html[data-skin="xp"] .empty h3 {
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #000;
+  text-shadow: none;
+}
+html[data-skin="xp"] .empty p { font-size: 11.5px; line-height: 1.7; }
+html[data-skin="xp"] .empty code {
+  font-family: var(--mono);
+  color: #000;
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--sunken);
+  padding: 0 3px;
+}
+
+html[data-skin="xp"] .skeleton {
+  height: 42px;
+  margin: 2px;
+  border: 0;
+  background: #e8e8e8;
+  clip-path: none;
+  animation: none;
+}
+
+/* ---------------- 操作台 ---------------- */
+
+html[data-skin="xp"] .deck {
+  gap: 10px;
+  padding: 5px 8px;
+  background: #ece9d8;
+  border-top: 0;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 2px 0 #f7f5ef, inset 0 -1px 0 #aca899;
+}
+
+html[data-skin="xp"] .sel-all,
+html[data-skin="xp"] .chip-opt {
+  gap: 5px;
+  font-size: 11.5px;
+  color: #000;
+  letter-spacing: 0;
+}
+html[data-skin="xp"] .opts { gap: 12px; }
+
+html[data-skin="xp"] .primary {
+  height: 23px;
+  padding: 0 12px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  clip-path: none;
+}
+html[data-skin="xp"] .primary:hover:not(:disabled) {
+  filter: none;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .primary:active:not(:disabled) {
+  transform: none;
+  box-shadow: var(--sunken);
+  padding: 1px 11px 0 13px;
+}
+/* 98 的默认按钮：外面再套一圈黑框 */
+html[data-skin="xp"] .primary:not(:disabled) { outline: 1px solid #000; outline-offset: 1px; }
+html[data-skin="xp"] .primary:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+html[data-skin="xp"] .primary:disabled {
+  background: #ece9d8;
+  border: 0;
+  color: #aca899;
+  box-shadow: var(--raise);
+  /* 禁用的文字右下打一层白，是 98 的标志性做法 */
+  text-shadow: 1px 1px 0 #ffffff;
+  cursor: default;
+}
+html[data-skin="xp"] .primary.small {
+  height: 21px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  background: #ece9d8;
+  color: #000;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .primary.small:hover:not(:disabled) {
+  background: #ece9d8;
+  color: #000;
+  box-shadow: var(--raise);
+}
+
+/* ---------------- toast：做成消息框 ---------------- */
+
+html[data-skin="xp"] .toast {
+  bottom: 46px;
+  max-width: 62vw;
+  padding: 8px 14px;
+  background: #ece9d8;
+  border: 0;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+  color: #000;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0;
+  clip-path: none;
+}
+html[data-skin="xp"] .toast.err {
+  border: 0;
+  color: #000;
+  box-shadow: var(--raise), 0 0 0 1px #000;
+}
+
+html[data-skin="xp"] .icon-btn.spin svg { animation: spin .7s steps(8) infinite; }
+
+/* ---------------- 内嵌终端：做成 98 的 MS-DOS 方式 ---------------- */
+
+html[data-skin="xp"] .termdock {
+  flex-basis: clamp(170px, 31vh, 320px);
+  border-top: 0;
+  background: #ece9d8;
+  box-shadow: inset 0 2px 0 #ffffff, inset 0 3px 0 #aca899;
+}
+
+html[data-skin="xp"] .term-drag { height: 6px; margin-top: 0; }
+html[data-skin="xp"] .term-drag::after {
+  height: 2px;
+  background: #aca899;
+  opacity: 1;
+  margin-top: 2px;
+}
+
+html[data-skin="xp"] .term-bar {
+  height: 24px;
+  gap: 6px;
+  padding: 0 4px;
+  border-bottom: 1px solid #aca899;
+  background: #ece9d8;
+}
+
+html[data-skin="xp"] .term-tab {
+  gap: 4px;
+  padding: 2px 8px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 11.5px;
+  border-radius: 0;
+}
+html[data-skin="xp"] .term-tab b {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #000;
+  opacity: 1;
+}
+html[data-skin="xp"] .term-tab.on {
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  color: #000;
+  padding-top: 3px;
+  padding-bottom: 1px;
+}
+html[data-skin="xp"] .term-tab.dead { color: #666; box-shadow: var(--raise); }
+
+html[data-skin="xp"] .term-tools .mini-btn {
+  width: 20px;
+  height: 18px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+html[data-skin="xp"] .term-tools .mini-btn:hover { background: #ece9d8; color: #000; }
+html[data-skin="xp"] .term-tools .mini-btn:active { box-shadow: var(--sunken); }
+
+html[data-skin="xp"] .term-grid { gap: 2px; background: #aca899; }
+
+html[data-skin="xp"] .term-pane {
+  background: #000000;
+  border: 0;
+  box-shadow: inset 1px 1px #003c74, inset -1px -1px #f7f5ef;
+}
+html[data-skin="xp"] .term-pane.on::after { box-shadow: inset 0 0 0 1px #0054e3; }
+
+html[data-skin="xp"] .term-hd {
+  height: 17px;
+  gap: 6px;
+  padding: 0 4px;
+  border-bottom: 0;
+  background: #ece9d8;
+  color: #000;
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+html[data-skin="xp"] .term-hd .term-meta { color: #555; }
+
+html[data-skin="xp"] .term-x {
+  width: 14px;
+  height: 13px;
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+  color: #000;
+  font-size: 11px;
+}
+html[data-skin="xp"] .term-x:hover { color: #000; }
+
+html[data-skin="xp"] .term-box { padding: 4px 2px 3px 5px; }
+
+/* MS-DOS 方式的滚动条也是 98 那套点阵槽 */
+html[data-skin="xp"] .term-box .xterm-viewport::-webkit-scrollbar { width: 16px; }
+html[data-skin="xp"] .term-box .xterm-viewport::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ffffff 0% 25%, #ece9d8 0% 50%) 0 0 / 2px 2px;
+}
+html[data-skin="xp"] .term-box .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #ece9d8;
+  border: 0;
+  box-shadow: var(--raise);
+}
+
+/* ---------------- 全文搜索结果 ---------------- */
+
+html[data-skin="xp"] .deep-head { border-bottom: 1px solid var(--face-lo); }
+html[data-skin="xp"] .deep-q { color: var(--navy); font-weight: 700; text-shadow: none; }
+html[data-skin="xp"] .deep-sub { color: var(--faint); }
+/* 终端工具栏那套 .mini-btn 是 20px 方钮，这里要压回来 */
+html[data-skin="xp"] .deep-head .mini-btn {
+  width: auto;
+  height: 22px;
+  padding: 0 10px;
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+/* ---------------- Token 统计 ---------------- */
+
+html[data-skin="xp"] .stat-card {
+  border: 0;
+  background: #ece9d8;
+  box-shadow: var(--raise);
+}
+html[data-skin="xp"] .stat-k,
+html[data-skin="xp"] .stat-h { color: #444; }
+html[data-skin="xp"] .stat-v { color: #0054e3; }
+html[data-skin="xp"] .stat-card:last-child .stat-v { color: #800080; }
+html[data-skin="xp"] .stat-chart,
+html[data-skin="xp"] .stat-panel {
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+}
+html[data-skin="xp"] .stat-panel h3 { color: #0054e3; font-size: 11px; letter-spacing: 0; }
+html[data-skin="xp"] .stat-row { border-top: 1px solid #f7f5ef; color: #000; }
+html[data-skin="xp"] .stat-row.head { color: #666; }
+html[data-skin="xp"] .stat-m { font-family: var(--ui); color: #000; }
+html[data-skin="xp"] .stat-n { color: #333; }
+html[data-skin="xp"] .stat-row .cost { color: #a05000; }
+html[data-skin="xp"] .seg.in { background: #0054e3; }
+html[data-skin="xp"] .seg.out { background: #800080; }
+html[data-skin="xp"] .seg.cache { background: #ece9d8; }
+html[data-skin="xp"] .stat-legend { color: #333; }
+html[data-skin="xp"] .stat-sess { border-top: 1px solid #f7f5ef; }
+html[data-skin="xp"] .stat-sess-t { color: #000; }
+html[data-skin="xp"] .stat-sess-c { color: #666; }
+html[data-skin="xp"] .stat-note { color: #444; }
+html[data-skin="xp"] .stat-ranges .mini-btn.on { box-shadow: var(--sunken); font-weight: 700; }
+
+html[data-skin="xp"] .sess-exp {
+  font-family: var(--ui);
+  letter-spacing: 0;
+  color: #0054e3;
+  opacity: .55;
+}
+html[data-skin="xp"] .sess-exp:hover { color: #0054e3; border-color: transparent; text-decoration: underline; opacity: 1; }
+
+/* ---------------- 复盘 ---------------- */
+
+html[data-skin="xp"] .brief-card {
+  border: none;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  padding: 12px;
+}
+html[data-skin="xp"] .brief-card.warn { background: #ffffe1; }
+html[data-skin="xp"] .brief-card.bad { background: #ffecec; }
+html[data-skin="xp"] .brief-card h3 { color: #0054e3; font-size: 12px; letter-spacing: 0; }
+html[data-skin="xp"] .brief-card p { color: #000; font-size: 12px; }
+html[data-skin="xp"] .brief-card code { color: #0054e3; font-family: var(--ui); }
+html[data-skin="xp"] .brief-hint { color: #444; }
+html[data-skin="xp"] .brief-v { color: #000; font-size: 12px; }
+html[data-skin="xp"] .brief-k {
+  border: 0;
+  box-shadow: var(--raise);
+  background: #ece9d8;
+  color: #0054e3;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+html[data-skin="xp"] .brief-line[data-k="卡在"] .brief-k { color: #a05000; }
+html[data-skin="xp"] .brief-line[data-k="下一步"] .brief-k { color: #800080; }
+html[data-skin="xp"] .brief-foot { border-top: 1px solid var(--face-lo); }
+html[data-skin="xp"] .brief-meta { color: #444; font-family: var(--ui); }
+html[data-skin="xp"] .brief-foot .mini-btn {
+  width: auto;
+  height: 22px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+html[data-skin="xp"] .brief-wait { color: #000; font-size: 12px; }
+html[data-skin="xp"] .brief-dot { background: #0054e3; }
+html[data-skin="xp"] .brief-raw { border: 0; background: #ffffff; box-shadow: var(--sunken); }
+html[data-skin="xp"] .brief-raw summary { font-family: var(--ui); color: #0054e3; font-size: 11px; }
+html[data-skin="xp"] .brief-turn { border-top: 1px solid #f7f5ef; }
+html[data-skin="xp"] .brief-turn-text { color: #000; font-size: 11.5px; }
+
+/* 结果按「一屏白纸」处理：外面一圈凹陷，组头是灰的，选中行整条反白 */
+html[data-skin="xp"] .hit-group {
+  padding: 2px;
+  border: none;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  clip-path: none;
+}
+html[data-skin="xp"] .hit-grouphead {
+  background: var(--face);
+  border-bottom: 1px solid var(--face-lo);
+}
+html[data-skin="xp"] .hit-grouphead:hover { background: var(--face-hi); }
+html[data-skin="xp"] .hit-ws { font-weight: 700; }
+html[data-skin="xp"] .hit-row { border-left: 0; padding-left: 6px; }
+html[data-skin="xp"] .hit-row:hover {
+  background: var(--navy);
+  border-left-color: var(--navy);
+}
+html[data-skin="xp"] .hit-row:hover .hit-text,
+html[data-skin="xp"] .hit-row:hover .hit-role,
+html[data-skin="xp"] .hit-row:hover .hit-when { color: #ffffff; }
+html[data-skin="xp"] .hit-text { color: #000000; font-size: 12px; }
+html[data-skin="xp"] .hit-text mark { background: #ffff00; color: #000000; }
+/* 9px 的宋体只剩一团像素，98 里所有字至少 11px */
+html[data-skin="xp"] .hit-role,
+html[data-skin="xp"] .hit-role.user { color: var(--magenta); font-family: var(--ui); font-size: 11px; min-width: 26px; }
+html[data-skin="xp"] .hit-role.tool { color: var(--faint); }
+
+/* 窄屏时左栏收起，和霓虹皮肤一致；这里只是把栅格宽度对齐 */
+@media (max-width: 940px) {
+  html[data-skin="xp"] .body { grid-template-columns: 210px 1fr; }
+}
+
+/* ==================================================================
+   Luna 造型层
+   ------------------------------------------------------------------
+   上面那一大段是从 98 继承来的结构（选择器和尺寸都对），
+   这里把「四层硬立体线」换成 XP 的「1px 边框 + 竖向渐变 + 3px 圆角」。
+   同特异性、写在后面，覆盖生效。
+================================================================== */
+
+/* ---------------- 顶栏：Luna 标题栏 ---------------- */
+
+html[data-skin="xp"] .topbar {
+  background:
+    linear-gradient(180deg, #0a9bff 0%, #0058e6 6%, #0b5fe8 38%, #0054e3 72%, #003bb0 100%);
+  border-bottom: 1px solid #003c74;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 2px 8px rgba(0, 0, 0, .28);
+  padding: 7px 13px;
+}
+html[data-skin="xp"] .topbar::after { display: none; }
+
+html[data-skin="xp"] .brand-text h1 {
+  color: #ffffff;
+  font-family: "Tahoma", "Microsoft YaHei UI", sans-serif;
+  font-size: 15px;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+html[data-skin="xp"] .brand-text h1 i { color: #cfe4ff; }
+html[data-skin="xp"] .brand-text p { color: #cfe4ff; letter-spacing: .16em; }
+
+html[data-skin="xp"] .logo {
+  background: linear-gradient(180deg, #ffffff, #d7e7ff);
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  color: #0054e3;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+html[data-skin="xp"] .clock { color: #ffffff; text-shadow: 0 1px 1px rgba(0, 0, 0, .4); }
+html[data-skin="xp"] .lamp { border-radius: 2px; border-color: rgba(255, 255, 255, .55); }
+html[data-skin="xp"] .lamp.pwr { background: #86e086; }
+html[data-skin="xp"] .lamp.act { background: #ffd166; }
+
+html[data-skin="xp"] .search {
+  background: #ffffff;
+  border: 1px solid #7f9db9;
+  border-radius: 3px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12);
+}
+html[data-skin="xp"] .search:focus-within {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px #316ac5;
+}
+html[data-skin="xp"] .search input { color: #000000; }
+html[data-skin="xp"] .search .prompt { color: #0054e3; }
+html[data-skin="xp"] .kbd { background: #f1efe2; border-color: #aca899; color: #333333; }
+
+html[data-skin="xp"] .icon-btn {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f0e6 45%, #e3e0d2 100%);
+  color: #0046a8;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+html[data-skin="xp"] .icon-btn:hover {
+  background: linear-gradient(180deg, #ffffff, #d9e8ff);
+  color: #003399;
+  border-color: #0054e3;
+}
+html[data-skin="xp"] .icon-btn:active { box-shadow: inset 0 1px 3px rgba(0, 0, 0, .28); }
+
+/* ---------------- 左栏 ---------------- */
+
+html[data-skin="xp"] .crt { background: #3f7cc4; }
+
+html[data-skin="xp"] .rail {
+  background: linear-gradient(180deg, #f7f5ec, #e7e4d5);
+  border-right: 1px solid #aca899;
+}
+
+html[data-skin="xp"] .rail-hd { color: #0054e3; letter-spacing: .18em; text-shadow: none; }
+html[data-skin="xp"] .rail-hd i { background: linear-gradient(90deg, #9db9d5, transparent); }
+
+html[data-skin="xp"] .rail-sec {
+  background: #ffffff;
+  border: 1px solid #aca899;
+  border-radius: 4px;
+  padding: 8px 9px 9px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+html[data-skin="xp"] .rail-sec h3 { color: #003c74; letter-spacing: 0; font-size: 11px; }
+
+/* 时间范围：XP 的分段按钮就是一组小按钮，选中的那个是蓝渐变 */
+html[data-skin="xp"] .seg { gap: 2px; }
+html[data-skin="xp"] .seg button {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f0e6 45%, #e3e0d2 100%);
+  color: #003399;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+html[data-skin="xp"] .seg button::before { display: none; }
+html[data-skin="xp"] .seg button:hover {
+  background: linear-gradient(180deg, #ffffff, #d9e8ff);
+  color: #003399;
+}
+html[data-skin="xp"] .seg button.on {
+  background: linear-gradient(180deg, #4aa2ff 0%, #0a63e8 55%, #0054e3 100%);
+  border-color: #003c74;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+html[data-skin="xp"] .seg button.on em { color: #dbe9ff; }
+
+/* 输入框：白底、细蓝灰边、内阴影 */
+html[data-skin="xp"] .field select,
+html[data-skin="xp"] .field input[type="text"],
+html[data-skin="xp"] .field textarea {
+  background: #ffffff;
+  border: 1px solid #7f9db9;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .10);
+  color: #000000;
+}
+html[data-skin="xp"] .field select:focus,
+html[data-skin="xp"] .field input[type="text"]:focus,
+html[data-skin="xp"] .field textarea:focus {
+  border-color: #316ac5;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .10), 0 0 0 1px #a8c6f0;
+}
+
+/* ---------------- 按钮族 ---------------- */
+
+html[data-skin="xp"] .mini-btn,
+html[data-skin="xp"] .term-tools .mini-btn {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f0e6 45%, #e3e0d2 100%);
+  box-shadow: inset 0 1px 0 #ffffff;
+  color: #003399;
+}
+html[data-skin="xp"] .mini-btn:hover,
+html[data-skin="xp"] .term-tools .mini-btn:hover {
+  background: linear-gradient(180deg, #ffffff, #d9e8ff);
+  border-color: #0054e3;
+  color: #003399;
+}
+html[data-skin="xp"] .mini-btn:active,
+html[data-skin="xp"] .term-tools .mini-btn:active {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .28);
+}
+
+html[data-skin="xp"] .mini-btn.go {
+  border-color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f0e6 45%, #e3e0d2 100%);
+  color: #0046a8;
+  font-weight: 700;
+}
+html[data-skin="xp"] .mini-btn.go:hover {
+  background: linear-gradient(180deg, #4aa2ff, #0054e3);
+  color: #ffffff;
+}
+
+html[data-skin="xp"] .primary {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #4aa2ff 0%, #0a63e8 55%, #0054e3 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+html[data-skin="xp"] .primary:hover {
+  background: linear-gradient(180deg, #62b0ff 0%, #1470f2 55%, #0a5fe8 100%);
+}
+
+/* ---------------- 主屏 ---------------- */
+
+html[data-skin="xp"] .screen { background: #ece9d8; }
+
+html[data-skin="xp"] .screen-hd {
+  background: linear-gradient(180deg, #f7f5ec, #e3e0d2);
+  border-bottom: 1px solid #aca899;
+  color: #003c74;
+}
+
+html[data-skin="xp"] .ws-card {
+  background: linear-gradient(180deg, #ffffff, #fbfaf5);
+  border: 1px solid #aca899;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .07);
+}
+html[data-skin="xp"] .ws-card:hover {
+  border-color: #316ac5;
+  box-shadow: 0 2px 8px rgba(49, 106, 197, .20);
+}
+html[data-skin="xp"] .ws-card.sel {
+  border-color: #316ac5;
+  background: linear-gradient(180deg, #eaf3ff, #d9e8ff);
+  box-shadow: 0 1px 6px rgba(49, 106, 197, .22);
+}
+html[data-skin="xp"] .ws-card::before { display: none; }
+html[data-skin="xp"] .ws-name { color: #003c74; }
+html[data-skin="xp"] .ws-card.sel .ws-name { color: #003399; }
+
+html[data-skin="xp"] .tool-chip {
+  border: 1px solid #aca899;
+  border-radius: 8px;
+  background: #f7f5ec;
+  color: #333333;
+}
+html[data-skin="xp"] .tool-chip i { background: #316ac5; }
+
+html[data-skin="xp"] .sess-panel { background: #ffffff; border-color: #d5d2c4; }
+html[data-skin="xp"] .sess-row { border-top: 1px solid #ecebe0; }
+html[data-skin="xp"] .sess-row:hover { background: #eaf3ff; }
+html[data-skin="xp"] .sess-row.sel,
+html[data-skin="xp"] .sess-row.on { background: #316ac5; color: #ffffff; }
+html[data-skin="xp"] .sess-go { color: #0054e3; }
+
+html[data-skin="xp"] .deck {
+  background: linear-gradient(180deg, #f7f5ec, #e3e0d2);
+  border-top: 1px solid #aca899;
+}
+
+/* ---------------- 终端面板 ---------------- */
+
+html[data-skin="xp"] .termdock {
+  background: #ece9d8;
+  border-top: 1px solid #aca899;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, .18);
+}
+html[data-skin="xp"] .term-bar {
+  background: linear-gradient(180deg, #ffffff, #e3e0d2);
+  border-bottom: 1px solid #aca899;
+}
+html[data-skin="xp"] .term-tab {
+  border: 1px solid #aca899;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #f7f5ec, #e3e0d2);
+  color: #003c74;
+}
+html[data-skin="xp"] .term-tab.on {
+  background: #ffffff;
+  border-color: #003c74;
+  color: #000000;
+  font-weight: 700;
+}
+html[data-skin="xp"] .term-pane { background: #000000; }
+html[data-skin="xp"] .term-pane.on { border-color: #316ac5; }
+
+/* ---------------- 其他容器 ---------------- */
+
+html[data-skin="xp"] .brief-card,
+html[data-skin="xp"] .stat-card,
+html[data-skin="xp"] .stat-chart,
+html[data-skin="xp"] .stat-panel,
+html[data-skin="xp"] .hit-group {
+  background: #ffffff;
+  border: 1px solid #aca899;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+html[data-skin="xp"] .stat-card { clip-path: none; }
+html[data-skin="xp"] .deep-head { border-bottom: 1px solid #aca899; }
+html[data-skin="xp"] .deep-q { color: #003c74; }
+
+html[data-skin="xp"] .toast {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: #ffffe1;
+  color: #000000;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+}
+
+/* 滚动条：XP 的蓝灰滑块，不是 98 的点阵槽 */
+html[data-skin="xp"] ::-webkit-scrollbar { width: 15px; height: 15px; }
+html[data-skin="xp"] ::-webkit-scrollbar-track {
+  background: #f1efe2;
+  border-left: 1px solid #d5d2c4;
+}
+html[data-skin="xp"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #cdd9e8, #a8bdd6);
+  border: 1px solid #7f9db9;
+  border-radius: 2px;
+}
+html[data-skin="xp"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #dbe7f6, #b8cde6);
+}
+
+/* ---------------- 修正：状态区与单选项 ---------------- */
+
+/* 状态灯和时钟在蓝标题栏上，不要 98 那个米黄小方块 */
+html[data-skin="xp"] .status {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+html[data-skin="xp"] .lamp { border-color: rgba(255, 255, 255, .65); }
+
+/* 时间范围在 XP 里是单选组：没有边框，只有一个圆点和文字 */
+html[data-skin="xp"] .seg button {
+  padding: 3px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #000000;
+  font-size: 12px;
+}
+html[data-skin="xp"] .seg button:hover {
+  background: transparent;
+  border: 0;
+  color: #0054e3;
+}
+html[data-skin="xp"] .seg button::before {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #7f9db9;
+}
+html[data-skin="xp"] .seg button.on {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #000000;
+  font-weight: 700;
+}
+html[data-skin="xp"] .seg button.on::before {
+  background: radial-gradient(circle at 50% 50%, #0054e3 0 3px, #ffffff 3.2px);
+  box-shadow: inset 0 0 0 1px #316ac5;
+}

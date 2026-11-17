@@ -25,6 +25,7 @@ struct AppState {
   std::string baseUrl;
   std::string shotPath;
   std::string autoUi;
+  bool hotkeyOk = false;
 };
 
 AppState g_app;
@@ -172,7 +173,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       }
       return 0;
     }
+    case WM_HOTKEY: {
+      // Ctrl+Shift+Space：在前台就收起，否则拉起来并把光标放进搜索框。
+      // 这就是「全局唤出」的全部——不驻留托盘，也不抢焦点以外的任何东西。
+      if (wp != 1) break;
+      crg::logf("hotkey toggle");
+      const bool focused = IsWindowVisible(hwnd) && !IsIconic(hwnd) && GetForegroundWindow() == hwnd;
+      if (focused) {
+        ShowWindow(hwnd, SW_HIDE);
+      } else {
+        ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+        SetForegroundWindow(hwnd);
+        if (g_app.webview) {
+          g_app.webview->ExecuteScript(
+              L"var s=document.getElementById('search');if(s){s.focus();s.select();}", nullptr);
+        }
+      }
+      return 0;
+    }
     case WM_DESTROY:
+      if (g_app.hotkeyOk) UnregisterHotKey(hwnd, 1);
       PostQuitMessage(0);
       return 0;
   }
@@ -273,8 +293,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                                  GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
                                  LR_SHARED);
   // 底色要跟当前主题一致，否则 WebView2 首帧之前会闪一块不属于该主题的颜色
-  wc.hbrBackground = CreateSolidBrush(
-      backend.theme() == "win98" ? RGB(192, 192, 192) : RGB(5, 2, 11));
+  // 每套皮肤一个底色：首帧之前窗口就是这个色，选错了启动会闪一下
+  const std::string theme = backend.theme();
+  COLORREF bg = RGB(5, 2, 11);  // 霓虹
+  if (theme == "amber") bg = RGB(8, 5, 0);
+  else if (theme == "win98") bg = RGB(192, 192, 192);
+  else if (theme == "xp") bg = RGB(236, 233, 216);
+  wc.hbrBackground = CreateSolidBrush(bg);
   wc.lpszClassName = kClassName;
   RegisterClassExW(&wc);
 
@@ -290,6 +315,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                               kWinW, kWinH, nullptr, nullptr, hInst, nullptr);
   if (!hwnd) return 1;
   ShowWindow(hwnd, SW_SHOW);
+
+  // 全局热键 Ctrl+Shift+Space：任何程序里按都能把窗口拉出来。
+  // 被别的程序占了就记一行日志，不影响启动和截图
+  g_app.hotkeyOk = RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT, VK_SPACE) != 0;
+  crg::logf(std::string("hotkey ctrl+shift+space ") +
+            (g_app.hotkeyOk ? "ok" : ("failed err=" + std::to_string(GetLastError()))));
 
   std::wstring userData = exeDirW() + L"\\data\\WebView2";
   // --demo：加载内置示例数据，不扫本机历史也不拉起终端，用来截图或给人预览界面

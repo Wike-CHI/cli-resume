@@ -109,6 +109,10 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 
 快捷键：`/` 搜索、`Ctrl+A` 全选、`Ctrl+Enter` 恢复、`Esc` 取消搜索或高亮。
 
+**全局热键 `Ctrl+Shift+Space`**：任何程序里按都能把窗口拉到前台并把光标放进搜索框，
+再按一次收起（`main.cpp` 里 `RegisterHotKey`，`WM_HOTKEY` 负责切换）。被别的程序占用时
+只记一行日志，不影响启动。
+
 顶栏右侧的四格方块按钮一键换皮肤，左栏「外观主题」下拉是同一个设置，改完立即生效并落盘。
 
 左栏设置区能改默认时间范围、外观主题、进入方式（应用内终端 / 外部窗口）、启动时是否恢复上次的窗格、
@@ -145,10 +149,25 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 
 ## 主题是怎么组织的
 
-`style.css` 只写结构（栅格、尺寸、层级），造型全在皮肤里：
+`style.css` 只写结构（栅格、尺寸、层级），造型全在皮肤里，一共四套：
 
-- `style.css` 顶部的 `:root` 就是霓虹主题的变量表
-- `theme-win98.css` 用 `html[data-skin="win98"]` 前缀成组覆盖，原始规则一条没改
+| 皮肤 | 文件 | 造型语言 |
+|---|---|---|
+| 80s 霓虹 CRT | `style.css` 的 `:root` | 紫黑底、青/品红双霓虹、扫描线、辉光 |
+| 70s 琥珀终端 | `theme-amber.css` | 单色 P3 橙黄，只有亮度层次；等宽字体、无圆角 |
+| Windows 98 | `theme-win98.css` | 四层 1px 立体线、无渐变、宋体点阵字 |
+| Windows XP Luna | `theme-xp.css` | 1px 边框 + 竖向渐变 + 3px 圆角、蓝标题栏、米黄客户区 |
+
+每套都用 `html[data-skin="…"]` 前缀成组覆盖，`style.css` 一条没改。
+
+**半透明色也走变量。** 霓虹那边有 100 多处以 `rgba(0, 240, 255, .18)` 形式写死的边框、光晕、
+阴影，直接改色会漏一大片。所以 `:root` 里额外放了五个 RGB 通道（`--cyan-rgb` 等），
+样式统一写 `rgba(var(--cyan-rgb), .18)`；琥珀皮肤只要把通道改成 `255, 176, 0`，
+整屏就变橙，不用逐条覆盖。
+
+XP 那套是直接从 98 的文件派生的：选择器、尺寸、栅格完全一样，只把「四层硬立体线」换成
+「1px 边框 + 竖向渐变 + 圆角」，所以 `theme-xp.css` 里前半段是 98 的规则、后半段是
+「Luna 造型层」，同特异性写在后面覆盖。
 
 98 那套九成的立体感来自下面两个变量，文件里反复引用：
 
@@ -161,8 +180,8 @@ bin\cli-resume.exe --ui enter --shot a.png             展开并点进第一条�
 分组框、滚动条滑块、勾选框全是这两条的组合。分组框那种「刻进去一道」的凹刻是
 `inset 1px 1px 暗 + inset -1px -1px 亮`，方向与凸起相反。
 
-加第三套皮肤不用碰 `style.css`：新建 `theme-xxx.css`，规则都用 `html[data-skin="xxx"]` 开头，
-再往 `app.js` 的 `SKINS` 里加个名字即可。
+加第五套皮肤不用碰 `style.css`：新建 `theme-xxx.css`，规则都用 `html[data-skin="xxx"]` 开头，
+在 `index.html` 里引一下，再往 `app.js` 的 `SKINS` / `TERM_THEMES` 里加个名字即可。
 
 ## 实现上踩到的坑
 

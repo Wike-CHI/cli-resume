@@ -1,0 +1,377 @@
+/* ------------------------------------------------------------------
+   CLI//RESUME — 70s 琥珀单色终端
+   ------------------------------------------------------------------
+   1970 年代的玻璃终端只有一种颜色：P3 荧光粉的琥珀。没有彩色、没有渐变光晕，
+   所有信息靠「亮 / 暗 / 反白」区分。所以这套皮肤只改调色板和字体，
+   结构沿用霓虹那套（它本来就是 CRT 布局），再关掉网格和切角。
+
+   换色靠 style.css 里的 --*-rgb 变量：那边 100 多处半透明边框、光晕、阴影
+   全部引用这五个通道，这里改一次就整体变琥珀，不用逐条覆盖。
+------------------------------------------------------------------ */
+
+html[data-skin="amber"] {
+  --void: #0a0602;
+  --ink: #0e0902;
+  --panel: #150e03;
+  --panel-hi: #1d1505;
+
+  --line: rgba(var(--cyan-rgb), .22);
+  --line-soft: rgba(var(--cyan-rgb), .10);
+  --line-hot: rgba(var(--cyan-rgb), .58);
+
+  --cyan: #ffb000;
+  --magenta: #ff7a00;
+  --violet: #d68a00;
+  --amber: #ffd166;
+  --lime: #ffc850;
+
+  --cyan-rgb: 255, 176, 0;
+  --mag-rgb: 255, 122, 0;
+  --violet-rgb: 214, 138, 0;
+  --amber-rgb: 255, 209, 102;
+  --lime-rgb: 255, 200, 80;
+
+  --text: #ffc247;
+  --muted: #c08a28;
+  --faint: #8a6420;
+
+  /* 单色终端没有比例字体：英文数字一律等宽，中文退回雅黑保证可读 */
+  --ui: "Cascadia Mono", "Consolas", "Lucida Console", "Microsoft YaHei UI", monospace;
+  --mono: "Cascadia Mono", "Consolas", "Lucida Console", "Microsoft YaHei UI", monospace;
+
+  --glow-cyan: 0 0 10px rgba(var(--cyan-rgb), .45);
+  --glow-mag: 0 0 12px rgba(var(--mag-rgb), .35);
+
+  /* 70s 的屏幕是圆的，外壳是直的：切角一律不要 */
+  --cut: none;
+  --cut-sm: none;
+}
+
+/* ---------------- 机身 ---------------- */
+
+html[data-skin="amber"] .crt {
+  background:
+    radial-gradient(90% 60% at 50% 0%, rgba(var(--cyan-rgb), .10), transparent 62%),
+    radial-gradient(140% 90% at 50% 120%, rgba(var(--cyan-rgb), .06), transparent 60%),
+    #080500;
+}
+
+/* 霓虹的透视网格是紫的，单色屏上不要 */
+html[data-skin="amber"] .crt::before { display: none; }
+
+html[data-skin="amber"] .crt::after {
+  background: radial-gradient(120% 90% at 50% 50%, transparent 55%, rgba(0, 0, 0, .72));
+}
+
+html[data-skin="amber"] .crt-lines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, .34) 2px 4px
+  );
+  opacity: .55;
+}
+
+html[data-skin="amber"] .crt-roll {
+  background: linear-gradient(to bottom, transparent, rgba(var(--cyan-rgb), .05), transparent);
+  animation-duration: 11s;
+}
+
+/* ---------------- 顶栏 ---------------- */
+
+html[data-skin="amber"] .topbar {
+  background: linear-gradient(180deg, #171004 0%, #0b0601 100%);
+  border-bottom: 1px solid rgba(var(--cyan-rgb), .35);
+  box-shadow: 0 1px 0 rgba(var(--cyan-rgb), .10), 0 10px 24px rgba(0, 0, 0, .6);
+}
+
+html[data-skin="amber"] .topbar::after {
+  background: var(--cyan);
+  opacity: .5;
+  height: 1px;
+  filter: none;
+}
+
+html[data-skin="amber"] .brand-text h1 {
+  color: var(--cyan);
+  letter-spacing: .22em;
+  text-shadow: 0 0 12px rgba(var(--cyan-rgb), .5);
+}
+
+html[data-skin="amber"] .brand-text h1 i { color: var(--amber); }
+
+html[data-skin="amber"] .brand-text p {
+  color: var(--faint);
+  letter-spacing: .3em;
+}
+
+html[data-skin="amber"] .logo {
+  border: 1px solid rgba(var(--cyan-rgb), .55);
+  background: rgba(var(--cyan-rgb), .06);
+  color: var(--cyan);
+}
+
+html[data-skin="amber"] .clock { color: var(--amber); text-shadow: 0 0 8px rgba(var(--cyan-rgb), .5); }
+html[data-skin="amber"] .lamp { border-radius: 0; }
+html[data-skin="amber"] .lamp.pwr { background: var(--cyan); box-shadow: 0 0 8px rgba(var(--cyan-rgb), .7); }
+html[data-skin="amber"] .lamp.act { background: var(--amber); }
+
+html[data-skin="amber"] .search {
+  border: 1px solid rgba(var(--cyan-rgb), .4);
+  background: #060400;
+}
+
+html[data-skin="amber"] .search:focus-within {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(var(--cyan-rgb), .25), 0 0 16px rgba(var(--cyan-rgb), .18);
+}
+
+html[data-skin="amber"] .search .prompt { color: var(--cyan); }
+html[data-skin="amber"] .search input { color: var(--text); }
+html[data-skin="amber"] .search input::placeholder { color: var(--faint); }
+html[data-skin="amber"] .search input { caret-color: var(--amber); }
+html[data-skin="amber"] .kbd { border-color: rgba(var(--cyan-rgb), .35); color: var(--muted); }
+
+html[data-skin="amber"] .icon-btn {
+  border: 1px solid rgba(var(--cyan-rgb), .28);
+  background: rgba(var(--cyan-rgb), .05);
+  color: var(--muted);
+}
+
+html[data-skin="amber"] .icon-btn:hover {
+  color: #080500;
+  background: var(--cyan);
+  border-color: var(--amber);
+  box-shadow: 0 0 14px rgba(var(--cyan-rgb), .4);
+}
+
+/* ---------------- 左栏 ---------------- */
+
+html[data-skin="amber"] .rail {
+  background: linear-gradient(180deg, #0f0a02, #070400);
+  border-right: 1px solid rgba(var(--cyan-rgb), .22);
+  backdrop-filter: none;
+}
+
+html[data-skin="amber"] .rail-hd {
+  color: var(--cyan);
+  letter-spacing: .34em;
+  text-shadow: 0 0 8px rgba(var(--cyan-rgb), .4);
+}
+
+html[data-skin="amber"] .rail-sec h3 {
+  color: var(--cyan);
+  letter-spacing: .18em;
+}
+
+html[data-skin="amber"] .rail-sec h3::before {
+  content: "▌";
+  color: var(--amber);
+  margin-right: 4px;
+}
+
+html[data-skin="amber"] .seg button {
+  border: 1px solid rgba(var(--cyan-rgb), .28);
+  background: #0a0601;
+  color: var(--muted);
+}
+
+html[data-skin="amber"] .seg button.on {
+  background: var(--cyan);
+  border-color: var(--amber);
+  color: #080500;
+  box-shadow: 0 0 12px rgba(var(--cyan-rgb), .35);
+}
+
+html[data-skin="amber"] .seg button em { color: var(--faint); }
+html[data-skin="amber"] .seg button.on em { color: #3a2600; }
+
+html[data-skin="amber"] .field select,
+html[data-skin="amber"] .field input[type="text"],
+html[data-skin="amber"] .field textarea {
+  border: 1px solid rgba(var(--cyan-rgb), .28);
+  background: #060400;
+  color: var(--text);
+}
+
+html[data-skin="amber"] .field select:focus,
+html[data-skin="amber"] .field input[type="text"]:focus,
+html[data-skin="amber"] .field textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(var(--cyan-rgb), .18);
+}
+
+html[data-skin="amber"] .primary {
+  border: 1px solid var(--cyan);
+  background: rgba(var(--cyan-rgb), .10);
+  color: var(--cyan);
+  letter-spacing: .12em;
+}
+
+html[data-skin="amber"] .primary:hover {
+  background: var(--cyan);
+  color: #080500;
+  box-shadow: 0 0 16px rgba(var(--cyan-rgb), .45);
+}
+
+/* ---------------- 主屏 ---------------- */
+
+html[data-skin="amber"] .screen-hd {
+  border-bottom: 1px solid rgba(var(--cyan-rgb), .22);
+  color: var(--muted);
+}
+
+html[data-skin="amber"] .screen-hd .meta { color: var(--faint); }
+
+html[data-skin="amber"] .ws-card {
+  background: linear-gradient(180deg, #140d03, #0a0602);
+  border: 1px solid rgba(var(--cyan-rgb), .26);
+}
+
+html[data-skin="amber"] .ws-card::before {
+  background: var(--cyan);
+}
+
+html[data-skin="amber"] .ws-card:hover {
+  border-color: rgba(var(--cyan-rgb), .6);
+  box-shadow: 0 0 0 1px rgba(var(--cyan-rgb), .12), 0 6px 24px rgba(var(--cyan-rgb), .10);
+}
+
+html[data-skin="amber"] .ws-card.sel {
+  border-color: var(--cyan);
+  background: linear-gradient(180deg, rgba(var(--cyan-rgb), .10), rgba(8, 4, 0, .95));
+  box-shadow: 0 0 18px rgba(var(--cyan-rgb), .16);
+}
+
+html[data-skin="amber"] .ws-name { color: var(--cyan); letter-spacing: .04em; }
+html[data-skin="amber"] .ws-path { color: var(--faint); }
+html[data-skin="amber"] .ws-when,
+html[data-skin="amber"] .ws-count,
+html[data-skin="amber"] .ws-latest { color: var(--muted); }
+html[data-skin="amber"] .ws-no { border-color: rgba(var(--cyan-rgb), .25); color: var(--faint); }
+html[data-skin="amber"] .ws-card:hover .ws-no { color: var(--amber); border-color: rgba(var(--cyan-rgb), .55); }
+
+html[data-skin="amber"] .tool-chip {
+  border: 1px solid rgba(var(--cyan-rgb), .35);
+  color: var(--muted);
+  background: rgba(var(--cyan-rgb), .04);
+}
+
+html[data-skin="amber"] .tool-chip i { background: var(--cyan); }
+
+html[data-skin="amber"] .mini-btn {
+  border: 1px solid rgba(var(--cyan-rgb), .3);
+  background: rgba(var(--cyan-rgb), .04);
+  color: var(--muted);
+}
+
+html[data-skin="amber"] .mini-btn:hover {
+  color: #080500;
+  background: var(--cyan);
+  border-color: var(--amber);
+  box-shadow: 0 0 12px rgba(var(--cyan-rgb), .35);
+}
+
+html[data-skin="amber"] .mini-btn.go {
+  color: var(--amber);
+  border-color: rgba(var(--cyan-rgb), .55);
+}
+
+html[data-skin="amber"] .sess-panel { border-color: rgba(var(--cyan-rgb), .18); }
+html[data-skin="amber"] .sess-row { border-top: 1px solid rgba(var(--cyan-rgb), .08); }
+html[data-skin="amber"] .sess-row:hover { background: rgba(var(--cyan-rgb), .06); }
+html[data-skin="amber"] .sess-title { color: var(--text); }
+html[data-skin="amber"] .sess-when { color: var(--faint); }
+html[data-skin="amber"] .sess-go { color: var(--cyan); }
+
+html[data-skin="amber"] .list::-webkit-scrollbar-thumb { background: rgba(var(--cyan-rgb), .3); }
+
+/* ---------------- 搜索 / 复盘 / 统计的容器 ---------------- */
+
+html[data-skin="amber"] .hit-group,
+html[data-skin="amber"] .brief-card,
+html[data-skin="amber"] .stat-card,
+html[data-skin="amber"] .stat-chart,
+html[data-skin="amber"] .stat-panel {
+  background: linear-gradient(180deg, #130c03, #080501);
+  border-color: rgba(var(--cyan-rgb), .24);
+}
+
+html[data-skin="amber"] .stat-card { clip-path: none; }
+html[data-skin="amber"] .deep-head { border-bottom: 1px solid rgba(var(--cyan-rgb), .2); }
+html[data-skin="amber"] .deep-q { color: var(--amber); text-shadow: 0 0 8px rgba(var(--cyan-rgb), .35); }
+html[data-skin="amber"] .deep-sub { color: var(--faint); }
+
+html[data-skin="amber"] .stat-v { color: var(--cyan); }
+html[data-skin="amber"] .stat-card:last-child .stat-v { color: var(--amber); }
+html[data-skin="amber"] .seg.in { background: linear-gradient(180deg, var(--amber), #b57700); }
+html[data-skin="amber"] .seg.out { background: var(--magenta); }
+html[data-skin="amber"] .seg.cache { background: rgba(var(--cyan-rgb), .35); }
+
+html[data-skin="amber"] .brief-k { border-color: rgba(var(--cyan-rgb), .5); color: var(--cyan); }
+html[data-skin="amber"] .brief-line[data-k="卡在"] .brief-k { color: var(--amber); border-color: rgba(var(--amber-rgb), .55); }
+html[data-skin="amber"] .brief-line[data-k="下一步"] .brief-k { color: var(--magenta); border-color: rgba(var(--mag-rgb), .6); }
+
+/* ---------------- 终端面板 ---------------- */
+
+html[data-skin="amber"] .termdock {
+  background: linear-gradient(180deg, #100a02, #060400);
+  border-top-color: rgba(var(--cyan-rgb), .4);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, .6);
+}
+
+html[data-skin="amber"] .term-bar {
+  background: #0d0802;
+  border-bottom: 1px solid rgba(var(--cyan-rgb), .18);
+}
+
+html[data-skin="amber"] .term-tab {
+  border: 1px solid rgba(var(--cyan-rgb), .22);
+  color: var(--muted);
+}
+
+html[data-skin="amber"] .term-tab.on {
+  border-color: rgba(var(--cyan-rgb), .6);
+  background: rgba(var(--cyan-rgb), .08);
+  color: var(--amber);
+}
+
+html[data-skin="amber"] .term-tab b { color: var(--faint); }
+html[data-skin="amber"] .term-pane { background: #060400; }
+html[data-skin="amber"] .term-pane.on { border-color: rgba(var(--cyan-rgb), .55); }
+html[data-skin="amber"] .term-hd { color: var(--muted); }
+
+/* ---------------- 底部操作台 ---------------- */
+
+html[data-skin="amber"] .deck {
+  background: linear-gradient(180deg, #0d0802, #070401);
+  border-top: 1px solid rgba(var(--cyan-rgb), .25);
+}
+
+html[data-skin="amber"] .sel-all { color: var(--muted); }
+html[data-skin="amber"] .sel-all input,
+html[data-skin="amber"] .chip-opt input,
+html[data-skin="amber"] .ws-check {
+  border-color: rgba(var(--cyan-rgb), .45);
+  background: #060400;
+}
+html[data-skin="amber"] .sel-all input:checked,
+html[data-skin="amber"] .chip-opt input:checked,
+html[data-skin="amber"] .ws-check:checked {
+  background: var(--cyan);
+  border-color: var(--amber);
+}
+
+html[data-skin="amber"] .chip-opt { color: var(--muted); }
+
+html[data-skin="amber"] .toast {
+  border: 1px solid var(--cyan);
+  background: #0a0601;
+  color: var(--amber);
+  box-shadow: 0 0 20px rgba(var(--cyan-rgb), .25);
+}
+
+/* 光标方块还是那个方块，只是变琥珀 */
+html[data-skin="amber"] .caret { border-top-color: var(--faint); }
+html[data-skin="amber"] .ws-item.open .caret,
+html[data-skin="amber"] .ws-card:hover .caret { border-top-color: var(--cyan); }

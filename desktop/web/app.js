@@ -164,8 +164,10 @@ function applySettings(s) {
 // ---------------- 外观主题 ----------------
 // 皮肤全部挂在 html[data-skin] 上，样式在 style.css 与 theme-win98.css 里，
 // 这里只负责换属性和记下来；别处不要再写内联样式，否则换代就漏。
-const SKINS = ['neon', 'win98'];
-const SKIN_NAME = { neon: '80s 霓虹 CRT', win98: 'Windows 98' };
+const SKINS = ['neon', 'amber', 'win98', 'xp'];
+const SKIN_NAME = {
+  neon: '80s 霓虹 CRT', amber: '70s 琥珀终端', win98: 'Windows 98', xp: 'Windows XP Luna',
+};
 
 function applyTheme(name) {
   const skin = SKINS.includes(name) ? name : 'neon';
@@ -175,7 +177,7 @@ function applyTheme(name) {
   if (sel && sel.value !== skin) sel.value = skin;
   const btn = $('theme-btn');
   if (btn) {
-    const next = skin === 'win98' ? 'neon' : 'win98';
+    const next = SKINS[(SKINS.indexOf(skin) + 1) % SKINS.length];
     btn.title = `外观：${SKIN_NAME[skin]}（点击切到 ${SKIN_NAME[next]}）`;
   }
   // 只作为下次启动首帧的垫片，真正生效以 settings.json 为准；
@@ -1178,7 +1180,7 @@ $('drawer-close').addEventListener('click', closeDrawer);
 
 // 顶栏那个按钮只是「换一套」，设置里的下拉才是明确选择
 $('theme-btn').addEventListener('click', () => {
-  const next = S.settings.theme === 'win98' ? 'neon' : 'win98';
+  const next = SKINS[(SKINS.indexOf(S.settings.theme) + 1) % SKINS.length];
   applyTheme(next);
   saveSettings({ theme: next });
   toast(`外观：${SKIN_NAME[next]}`);
@@ -1234,6 +1236,17 @@ const TERM_THEMES = {
     brightYellow: '#ffcf66', brightBlue: '#9db4ff', brightMagenta: '#c98cff',
     brightCyan: '#7df9ff', brightWhite: '#ffffff',
   },
+  // 70s 单色屏：只有琥珀的亮暗，红绿蓝都退化成深浅不同的橙
+  amber: {
+    background: '#080500', foreground: '#ffc247',
+    cursor: '#ffd166', cursorAccent: '#080500',
+    selectionBackground: 'rgba(255, 176, 0, .28)',
+    black: '#1a1206', red: '#ff7a00', green: '#ffb000', yellow: '#ffd166',
+    blue: '#d68a00', magenta: '#ff9a3c', cyan: '#ffb000', white: '#ffc247',
+    brightBlack: '#70501a', brightRed: '#ff9a3c', brightGreen: '#ffd166',
+    brightYellow: '#ffe3a3', brightBlue: '#e0a040', brightMagenta: '#ffb870',
+    brightCyan: '#ffd166', brightWhite: '#fff0d0',
+  },
   // 98 的「MS-DOS 方式」：黑底、灰白字、深色 16 色
   win98: {
     background: '#000000', foreground: '#c0c0c0',
@@ -1245,22 +1258,38 @@ const TERM_THEMES = {
     brightYellow: '#ffff00', brightBlue: '#0000ff', brightMagenta: '#ff00ff',
     brightCyan: '#00ffff', brightWhite: '#ffffff',
   },
+  xp: {
+    background: '#000000', foreground: '#c0c0c0',
+    cursor: '#ffffff', cursorAccent: '#000000',
+    selectionBackground: 'rgba(49, 106, 197, .55)',
+    black: '#000000', red: '#800000', green: '#008000', yellow: '#808000',
+    blue: '#000080', magenta: '#800080', cyan: '#008080', white: '#c0c0c0',
+    brightBlack: '#808080', brightRed: '#ff0000', brightGreen: '#00ff00',
+    brightYellow: '#ffff00', brightBlue: '#0000ff', brightMagenta: '#ff00ff',
+    brightCyan: '#00ffff', brightWhite: '#ffffff',
+  },
 };
 
 const TM = { panes: [], active: null, restoring: false, restored: false };
 
 function termSkin() {
-  return S.settings.theme === 'win98' ? 'win98' : 'neon';
+  return TERM_THEMES[S.settings.theme] ? S.settings.theme : 'neon';
 }
+
+const TERM_FONT = {
+  neon: { family: 'Consolas, "Cascadia Mono", "JetBrains Mono", monospace', size: 12.5 },
+  amber: { family: '"Cascadia Mono", Consolas, "Lucida Console", monospace', size: 13 },
+  win98: { family: '"Fixedsys", "Lucida Console", Consolas, "SimSun", monospace', size: 13 },
+  xp: { family: '"Lucida Console", "Consolas", "SimSun", monospace', size: 12.5 },
+};
 
 function termOptions() {
   const skin = termSkin();
+  const font = TERM_FONT[skin] || TERM_FONT.neon;
   return {
     theme: TERM_THEMES[skin],
-    fontFamily: skin === 'win98'
-      ? '"Fixedsys", "Lucida Console", Consolas, "SimSun", monospace'
-      : 'Consolas, "Cascadia Mono", "JetBrains Mono", monospace',
-    fontSize: skin === 'win98' ? 13 : 12.5,
+    fontFamily: font.family,
+    fontSize: font.size,
     lineHeight: 1.18,
     letterSpacing: 0,
     cursorBlink: true,
