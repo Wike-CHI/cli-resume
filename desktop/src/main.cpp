@@ -116,6 +116,10 @@ std::string actionScript(const std::string& act) {
     // 点第一条会话的「导出」：验证前端动作链（示例模式下只会弹提示）
     return "var b=document.querySelector('[data-export]');if(b)b.click();";
   }
+  if (act == "favonly") {
+    // 勾上「只看收藏」：验证收藏过滤与置顶顺序
+    return "var c=document.getElementById('opt-fav');if(c){c.checked=true;c.dispatchEvent(new Event('change'));}";
+  }
   if (act == "stats") {
     // 打开 token 统计视图：验证汇总数字与图表的渲染
     return "document.getElementById('stats-btn').click();";

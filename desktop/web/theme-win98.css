@@ -1085,3 +1085,21 @@ html[data-skin="win98"] .only-chip {
   letter-spacing: 0;
 }
 html[data-skin="win98"] .only-chip b { color: #000080; font-weight: 700; }
+
+/* 收藏与批量：98 里星标就是深黄的小字符，批量按钮是一个普通按钮 */
+html[data-skin="win98"] .sess-star { color: #808080; text-shadow: none; }
+html[data-skin="win98"] .sess-star.on { color: #808000; }
+html[data-skin="win98"] .sess-row.fav .sess-title { color: #000080; font-weight: 700; }
+html[data-skin="win98"] .ws-fav { color: #000080; font-family: var(--ui); font-size: 10px; }
+html[data-skin="win98"] .batch-row { border-top: 1px solid #c8c5b8; }
+html[data-skin="win98"] .batch-btn {
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000000;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+html[data-skin="win98"] .batch-btn:hover { background: #c0c0c0; box-shadow: var(--raise); }
+html[data-skin="win98"] .batch-btn:active { box-shadow: var(--sunken); }

@@ -24,6 +24,11 @@ const ONLY_INIT = (() => {
 })();
 let onlyCwd = ONLY_INIT;
 
+// 收藏 = 置顶：集合里存 "tool:sid"，跨窗口共享（后端一份 favorites.json）
+const FAV = new Set();
+const favKey = (s) => `${s.tool}:${s.sessionId}`;
+function isFav(s) { return FAV.has(favKey(s)); }
+
 const S = {
   all: [],
   byId: new Map(),
@@ -117,6 +122,7 @@ async function load(force) {
     S.roots = d.roots;
     applySettings(d.settings);
     indexWorkspaces();
+    applyFavOrder();
     render();
     S.busy = false;
     btn.classList.remove('spin');
@@ -133,6 +139,7 @@ async function load(force) {
     S.roots = r.roots || {};
     if (r.settings) applySettings(r.settings);
     indexWorkspaces();
+    applyFavOrder();  // 收藏置顶：每次扫描后的新对象都要重排
     render();
     plog(`scan ok n=${S.all.length} elapsed=${S.stats.elapsedMs}ms cached=${r.cached}`);
   } catch (e) {
@@ -215,6 +222,7 @@ function visibleList() {
   const cutoff = S.range > 0 ? Date.now() - S.range * 3600e3 : 0;
   return S.all.filter((w) => {
     if (onlyCwd && !samePath(w.cwd, onlyCwd)) return false;
+    if ($('opt-fav') && $('opt-fav').checked && !(w.sessions || []).some(isFav)) return false;
     if (cutoff && w.lastActive < cutoff) return false;
     if (!q) return true;
     if (w.cwd.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)) return true;
@@ -233,12 +241,17 @@ function sessionRowHtml(ws, s, index) {
   const cls = s.tool === 'claude' ? 'cl' : 'cb';
   const extra = index >= INLINE_SESSIONS ? ' sess-extra' : '';
   const title = s.title || '（没有标题的会话）';
+  const fav = isFav(s);
   return `
-    <div class="sess-row${extra}" data-enter="1"
+    <div class="sess-row${extra}${fav ? ' fav' : ''}" data-enter="1"
          data-cwd="${esc(ws.cwd)}" data-tool="${esc(s.tool)}"
          data-sid="${esc(s.sessionId)}" data-title="${esc(title)}"
          title="进入这个对话：${esc(title)}">
       <span class="tool-dot ${cls}"></span>
+      <span class="sess-star${fav ? ' on' : ''}" data-fav="1"
+            data-tool="${esc(s.tool)}" data-sid="${esc(s.sessionId)}"
+            data-cwd="${esc(ws.cwd)}" data-title="${esc(title)}"
+            title="${fav ? '取消收藏' : '收藏并置顶'}">★</span>
       <span class="sess-title">${esc(title)}</span>
       <span class="sess-when">${esc(shortTime(s.mtime))}</span>
       <span class="sess-exp" data-export="1" data-cwd="${esc(ws.cwd)}" data-tool="${esc(s.tool)}"
@@ -254,7 +267,10 @@ function itemHtml(w, index) {
   const on = S.sel.has(key);
   const open = S.expanded.has(key);
   const showAll = S.showAll.has(key);
-  const sessions = w.sessions || [];
+  const allSessions = w.sessions || [];
+  const favCount = allSessions.filter(isFav).length;
+  const onlyFav = $('opt-fav') && $('opt-fav').checked;
+  const sessions = onlyFav ? allSessions.filter(isFav) : allSessions;
   const latest = sessions[0];
 
   // 一个目录下两个 CLI 混着用，标签按 tool 去重
@@ -264,6 +280,13 @@ function itemHtml(w, index) {
     return `<span class="tool-chip ${cls}"><i></i>${esc(t)}</span>`;
   }).join('');
 
+  // 一个目录有多条会话时，给一个「一次全开」的入口；上限由终端形态决定
+  const batchCap = S.settings.termMode === 'external' ? 8 : 4;
+  const batchRow = sessions.length >= 2
+    ? `<div class="batch-row"><button class="batch-btn" data-batch="${esc(key)}">
+         ⚡ 一次恢复最近 ${Math.min(batchCap, sessions.length)} 个会话
+       </button></div>`
+    : '';
   const rest = sessions.length - INLINE_SESSIONS;
   const moreRow = rest > 0
     ? `<div class="more-row"><button class="more-btn" data-more="${esc(key)}">
@@ -273,6 +296,7 @@ function itemHtml(w, index) {
 
   const panel = sessions.length
     ? `<div class="sess-panel">
+         ${batchRow}
          ${sessions.map((s, i) => sessionRowHtml(w, s, i)).join('')}
          ${moreRow}
        </div>`
@@ -291,6 +315,7 @@ function itemHtml(w, index) {
         <div class="ws-sub">
           ${chips}
           <span class="dot-sep">·</span>
+          ${favCount ? `<span class="ws-fav" title="已收藏 ${favCount} 个会话">★ ${favCount}</span><span class="dot-sep">·</span>` : ''}
           <span class="ws-count">${w.sessionCount || sessions.length} 个对话</span>
           <span class="dot-sep">·</span>
           <span class="ws-when">${esc(relTime(w.lastActive))}</span>
@@ -578,6 +603,94 @@ function renderBrief() {
   listEl.innerHTML = head + body;
   $('meta').textContent = b.loading ? '复盘生成中…' : `复盘 · ${b.name || b.cwd}`;
   updateBar();
+}
+
+// ---------------- 收藏（置顶） ----------------
+// 收藏只影响排序：同一个目录里收藏的排前面；「只看收藏」把它们筛出来单独看。
+
+function applyFavOrder() {
+  for (const w of S.all) {
+    const ss = w.sessions;
+    if (!ss || ss.length < 2) continue;
+    ss.sort((a, b) => {
+      const fa = isFav(a) ? 1 : 0;
+      const fb = isFav(b) ? 1 : 0;
+      if (fa !== fb) return fb - fa;
+      return (b.mtime || 0) - (a.mtime || 0);
+    });
+  }
+}
+
+async function loadFavorites() {
+  // 示例模式也读（只读不写）：否则截图里收藏状态永远是空的
+  try {
+    const r = await fetch('/api/favorites').then((x) => x.json());
+    FAV.clear();
+    for (const it of r.items || []) FAV.add(`${it.tool}:${it.sessionId}`);
+    applyFavOrder();
+    if (S.all.length) render();  // 首屏启动时目录还没扫出来，别先闪一下空列表
+  } catch (e) {
+    // 收藏读不到不影响主流程，当作没有收藏
+  }
+}
+
+async function toggleFav(el) {
+  if (DEMO) {
+    toast('示例模式不改收藏');
+    return;
+  }
+  const ds = el.dataset;
+  const key = `${ds.tool}:${ds.sid}`;
+  const was = FAV.has(key);
+  if (was) FAV.delete(key);
+  else FAV.add(key);
+  applyFavOrder();
+  render();
+
+  try {
+    const r = await fetch('/api/favorites/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: ds.tool, sid: ds.sid, cwd: ds.cwd, title: ds.title }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || '收藏失败');
+    // 服务端才是准的（另一个窗口可能刚改过），按返回值纠正一次
+    if (!!r.on !== !was) {
+      if (r.on) FAV.add(key);
+      else FAV.delete(key);
+      applyFavOrder();
+      render();
+    }
+    toast(r.on ? '已收藏并置顶' : '已取消收藏');
+  } catch (e) {
+    if (was) FAV.add(key);
+    else FAV.delete(key);
+    applyFavOrder();
+    render();
+    toast(e.message, true);
+  }
+}
+
+// 一键恢复一个目录的会话：内嵌面板最多 4 个窗格，外部终端一次开 8 个标签
+async function batchOpen(key) {
+  const ws = S.byId.get(key);
+  if (!ws) return;
+  const embedded = S.settings.termMode !== 'external';
+  const cap = embedded ? 4 : 8;
+  // 尊重当前视图：勾了「只看收藏」就只恢复收藏的，别偷偷把别的会话也拉起来
+  const onlyFav = $('opt-fav') && $('opt-fav').checked;
+  const pool = onlyFav ? (ws.sessions || []).filter(isFav) : (ws.sessions || []);
+  const list = pool.slice(0, cap);
+  if (!list.length) return;
+
+  const items = list.map((s) => ({
+    cwd: ws.cwd, tool: s.tool, sessionId: s.sessionId, title: s.title,
+  }));
+  const ok = await launchItems(items, items.length, true);
+  if (!ok) return;
+  const rest = pool.length - items.length;
+  toast(`已恢复 ${items.length} 个会话` +
+    (rest > 0 ? `，还有 ${rest} 个更早的没开（${embedded ? '面板上限 4 个' : '一次最多 8 个'}）` : ''));
 }
 
 // ---------------- 工作区窗口 ----------------
@@ -982,6 +1095,22 @@ listEl.addEventListener('click', (e) => {
     return;
   }
 
+  // 收藏：点星切换，立刻重排
+  const star = e.target.closest('[data-fav]');
+  if (star) {
+    e.stopPropagation();
+    toggleFav(star);
+    return;
+  }
+
+  // 批量恢复一个目录的会话
+  const batch = e.target.closest('[data-batch]');
+  if (batch) {
+    e.stopPropagation();
+    batchOpen(batch.dataset.batch);
+    return;
+  }
+
   // 导出：按会话恢复成 Markdown，落在「文档\cli-resume」
   const exp = e.target.closest('[data-export]');
   if (exp) {
@@ -1131,22 +1260,24 @@ function pickFromWorkspace(ws) {
   return out;
 }
 
-async function launchItems(items, note) {
+async function launchItems(items, note, quiet) {
   if (DEMO) {
     toast('示例模式：不会真的打开终端');
-    return;
+    return false;
   }
   if (!items || !items.length) {
     toast('没有可进入的对话', true);
-    return;
+    return false;
   }
   // 默认走应用内终端；设置里切成 external 才回到 Windows Terminal
   if (S.settings.termMode !== 'external') {
     await termOpenItems(items);
-    toast(items.length === 1
-      ? `已在应用内终端打开「${items[0].title || '该对话'}」`
-      : `已在终端面板并排打开 ${items.length} 个会话`);
-    return;
+    if (!quiet) {
+      toast(items.length === 1
+        ? `已在应用内终端打开「${items[0].title || '该对话'}」`
+        : `已在终端面板并排打开 ${items.length} 个会话`);
+    }
+    return true;
   }
   try {
     const r = await fetch('/api/open', {
@@ -1161,15 +1292,18 @@ async function launchItems(items, note) {
 
     if (r.ok) {
       const n = note || items.length;
-      toast(n === 1 ? `已进入「${items[0].title || '该对话'}」` : `已在 Windows Terminal 打开 ${n} 个标签页`);
+      if (!quiet) {
+        toast(n === 1 ? `已进入「${items[0].title || '该对话'}」` : `已在 Windows Terminal 打开 ${n} 个标签页`);
+      }
       plog('open ok ' + (r.command || ''));
-    } else {
-      toast(r.error || '打开失败', true);
-      plog('open fail ' + (r.error || ''));
+      return true;
     }
+    toast(r.error || '打开失败', true);
+    plog('open fail ' + (r.error || ''));
   } catch (e) {
     toast('打开失败：' + e.message, true);
   }
+  return false;
 }
 
 async function doOpen(keys) {
@@ -1229,6 +1363,8 @@ $('opt-cont').addEventListener('change', () => {
   S.settings.useContinue = $('opt-cont').checked;
   saveSettings({ useContinue: S.settings.useContinue });
 });
+// 只看收藏是视图开关，不落盘
+$('opt-fav').addEventListener('change', render);
 
 async function saveSettings(patch) {
   if (DEMO) return;
@@ -1804,8 +1940,26 @@ setInterval(tickClock, 1000);
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
 initOnlyChip();
 loadAutoStart();
-load(false).then(() => {
-  expandOnly();
-  if (onlyCwd) render();  // 展开状态是加在 S.expanded 上的，要重绘一次才看得见
-  termRestoreLayout();
+// 先读收藏再扫目录：首屏就是「收藏在前的顺序」，不会先抖一下
+loadFavorites()
+  .then(() => load(false))
+  .then(() => {
+    expandOnly();
+    if (onlyCwd) render();  // 展开状态是加在 S.expanded 上的，要重绘一次才看得见
+    termRestoreLayout();
+  });
+
+// 多个窗口之间同步收藏：切回来时静默对一次，变了才重绘
+window.addEventListener('focus', async () => {
+  try {
+    const r = await fetch('/api/favorites').then((x) => x.json());
+    const next = new Set((r.items || []).map((it) => `${it.tool}:${it.sessionId}`));
+    if (next.size === FAV.size && [...next].every((k) => FAV.has(k))) return;
+    FAV.clear();
+    next.forEach((k) => FAV.add(k));
+    applyFavOrder();
+    render();
+  } catch (e) {
+    /* 网络抖动忽略 */
+  }
 });

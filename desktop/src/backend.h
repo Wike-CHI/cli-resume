@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "exportmd.h"
+#include "favorites.h"
 #include "httplib.h"
 #include "search.h"
 #include "stats.h"
@@ -45,6 +46,7 @@ class Backend {
   int port_ = 0;
   TermManager terms_;
   SearchIndex search_;
+  Favorites fav_;
   Summarizer summary_;
 
   std::mutex scanMu_;

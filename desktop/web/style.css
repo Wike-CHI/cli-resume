@@ -926,6 +926,51 @@ html, body {
   box-shadow: 0 0 10px rgba(var(--cyan-rgb), .28);
 }
 
+/* 收藏星标与批量恢复 */
+.sess-star {
+  flex: 0 0 auto;
+  width: 13px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--faint);
+  opacity: .45;
+  cursor: pointer;
+}
+.sess-row:hover .sess-star { opacity: .95; }
+.sess-star.on {
+  color: var(--amber);
+  opacity: 1;
+  text-shadow: 0 0 8px rgba(var(--amber-rgb), .55);
+}
+.sess-star:hover { color: var(--amber); opacity: 1; }
+.sess-row.fav .sess-title { color: var(--amber); }
+.ws-fav {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: var(--amber);
+}
+
+.batch-row { padding: 6px 8px 6px 24px; border-top: 1px solid var(--line-soft); }
+.batch-btn {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px dashed rgba(var(--cyan-rgb), .38);
+  background: rgba(var(--cyan-rgb), .05);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: color .14s, border-color .14s, background .14s;
+}
+.batch-btn:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: rgba(var(--cyan-rgb), .10);
+}
+
 /* ---------------- 全文搜索结果 ---------------- */
 
 .deep-head {

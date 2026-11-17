@@ -338,6 +338,30 @@ void Backend::setupRoutes() {
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 
+  // ---------------- 收藏 ----------------
+  // 跨窗口共享（存在 dataDir 而不是 profileDir）：主窗口里收藏的，工作区窗口也认
+  srv_.Get("/api/favorites", [this](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(fav_.list()), "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/favorites/toggle", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      bool on = false;
+      if (fav_.toggle(jstr(body, "tool"), jstr(body, "sid"), jstr(body, "cwd"),
+                      jstr(body, "title"), on)) {
+        out = {{"ok", true}, {"on", on}};
+      } else {
+        out["error"] = "缺少会话 id";
+      }
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
   // ---------------- 窗口与开机自启 ----------------
   srv_.Get("/api/autostart", [](const httplib::Request&, httplib::Response& res) {
     json out = {{"ok", true}, {"on", autostartEnabled()}};
@@ -594,6 +618,7 @@ bool Backend::start() {
   // 索引尽早开始建：第一次要通读几十上百个会话文件，早点跑完用户少等
   search_.start(profileDir_);
   summary_.start(profileDir_);
+  fav_.start(dataDir_);  // 收藏跨窗口共享，不跟 profile 走
   // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
   // 两三个终端再叠加页面请求就会排队
   srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };

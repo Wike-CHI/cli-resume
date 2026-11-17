@@ -1399,3 +1399,21 @@ html[data-skin="xp"] .only-chip {
   letter-spacing: 0;
 }
 html[data-skin="xp"] .only-chip b { color: #0054e3; font-weight: 700; }
+
+/* 收藏与批量：XP 的星标是金色小字符，批量按钮走 Luna 渐变 */
+html[data-skin="xp"] .sess-star { color: #aca899; text-shadow: none; }
+html[data-skin="xp"] .sess-star.on { color: #c08000; }
+html[data-skin="xp"] .sess-row.fav .sess-title { color: #003399; font-weight: 700; }
+html[data-skin="xp"] .ws-fav { color: #a06000; font-family: var(--ui); font-size: 10px; }
+html[data-skin="xp"] .batch-row { border-top: 1px solid #e3e0d2; }
+html[data-skin="xp"] .batch-btn {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f0e6 45%, #e3e0d2 100%);
+  color: #003399;
+  font-family: var(--ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+html[data-skin="xp"] .batch-btn:hover { background: linear-gradient(180deg, #ffffff, #d9e8ff); }
