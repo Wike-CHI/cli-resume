@@ -1,4 +1,4 @@
-// 扫描 codebuddy / claude 的会话历史，还原出「上次在哪些目录干活」。
+// 扫描 codebuddy / claude / codex 的会话历史，还原出「上次在哪些目录干活」。
 // 会话文件里每条消息都带 cwd，所以不需要用户维护项目清单。
 #pragma once
 
@@ -31,6 +31,7 @@ struct ScanOptions {
   int maxAgeHours = 24 * 30;  // 只看这么多天内活跃过的会话；<=0 表示不限
   bool includeCodebuddy = true;
   bool includeClaude = true;
+  bool includeCodex = true;
   std::vector<std::string> exclude;  // 子串匹配，命中就跳过（大小写不敏感）
 };
 
@@ -40,8 +41,10 @@ struct ScanResult {
   int64_t elapsedMs = 0;
   std::string codebuddyRoot;
   std::string claudeRoot;
+  std::string codexRoot;
   bool codebuddyFound = false;
   bool claudeFound = false;
+  bool codexFound = false;
 };
 
 ScanResult scanAll(const ScanOptions& opts);

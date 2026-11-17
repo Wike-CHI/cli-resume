@@ -60,6 +60,29 @@ std::string flatten(const std::string& in) {
   return out;
 }
 
+
+// codex 的会话标题在 session_index.jsonl 里（thread_name），比正文首条消息准得多。
+// 整个进程读一次就够：索引构建期间这个文件基本不变。
+const std::unordered_map<std::string, std::string>& codexTitles() {
+  static std::unordered_map<std::string, std::string> map;
+  static std::once_flag once;
+  std::call_once(once, [] {
+    std::ifstream in(utf8ToWide(homeDir() + "\\.codex\\session_index.jsonl"), std::ios::binary);
+    std::string line;
+    while (std::getline(in, line)) {
+      if (line.find("\"thread_name\"") == std::string::npos) continue;
+      try {
+        json j = json::parse(line);
+        std::string id = jstr(j, "id");
+        std::string name = jstr(j, "thread_name");
+        if (!id.empty() && !name.empty()) map[id] = utf8Truncate(name, 120);
+      } catch (...) {
+      }
+    }
+  });
+  return map;
+}
+
 // "2026-11-17T01:57:22.351Z" → epoch ms（按 UTC 解析）。失败返回 0
 int64_t isoToMs(const std::string& s) {
   if (s.size() < 19) return 0;
@@ -273,7 +296,7 @@ void SearchIndex::writeIndexFile(const Doc& doc) const {
                      {"o", b.out}, {"cr", b.cacheRead}, {"cw", b.cacheWrite},
                      {"n", b.calls}});
   }
-  f << dumpJson(json{{"v", 3},
+  f << dumpJson(json{{"v", 4},
                      {"tool", doc.tool},
                      {"sid", doc.sessionId},
                      {"cwd", doc.cwd},
@@ -362,6 +385,27 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
 
     // 两个 CLI 的格式不同：codebuddy 是 type=message + role，claude 是 type 就是角色
     const std::string type = jstr(j, "type");
+
+    // codex 的用量单独一条记录，字段名也不一样：input 里含 cached，算钱前要拆开
+    if (type == "token_usage_record") {
+      json p = jval(j, "payload");
+      json usage = jval(p, "usage");
+      if (usage.is_object() && !usage.empty()) {
+        const std::string day = dayOf(jval(j, "timestamp"));
+        if (!day.empty()) {
+          UsageBucket* b = bucketFor(doc.usage, day, "codex");
+          const int64_t cached = numOf(usage, "cached_input_tokens");
+          const int64_t in = numOf(usage, "input_tokens");
+          b->in += in > cached ? in - cached : 0;
+          b->cacheRead += cached;
+          b->cacheWrite += numOf(usage, "cache_write_input_tokens");
+          b->out += numOf(usage, "output_tokens");
+          b->calls += 1;
+        }
+      }
+      return;
+    }
+
     std::string role;
     json content;
     if (type == "message") {
@@ -371,6 +415,29 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
       role = type;
       json msg = jval(j, "message");
       content = msg.is_object() ? jval(msg, "content") : jval(j, "content");
+    } else if (type == "session_meta") {
+      // codex：cwd 只在这里出现
+      json p = jval(j, "payload");
+      if (doc.cwd.empty()) doc.cwd = jstr(p, "cwd");
+      return;
+    } else if (type == "response_item") {
+      json p = jval(j, "payload");
+      const std::string pt = jstr(p, "type");
+      if (pt == "message") {
+        role = jstr(p, "role") == "user" ? "user" : "asst";
+        content = jval(p, "content");
+      } else if (pt == "function_call" || pt == "custom_tool_call") {
+        std::string name = jstr(p, "name");
+        std::string args = jstr(p, "arguments");
+        if (args.empty()) {
+          json a = jval(p, "input");
+          if (!a.is_null()) args = dumpJson(a);
+        }
+        content = json::array({{{"type", "text"}, {"text", "工具 " + name + " " + args}}});
+        role = "tool";
+      } else {
+        return;  // reasoning / encrypted 之类不进索引
+      }
     } else if (type == "summary") {
       // 老会话的摘要就是首条用户消息，拿来当兜底标题
       if (firstUser.empty()) {
@@ -393,7 +460,10 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
 
     const int64_t ts = tsOf(j, doc.mtime);
     if (doc.ts == 0 || (ts > 0 && ts < doc.ts)) doc.ts = ts;
-    if (firstUser.empty() && role == "user" && !text.empty()) firstUser = text;
+    // codex 的第一条 user 往往是整份 AGENTS.md 注入，拿来当标题又长又没意义
+    const bool injected = text.rfind("# AGENTS.md", 0) == 0 ||
+                          text.rfind("The following is", 0) == 0;
+    if (firstUser.empty() && role == "user" && !text.empty() && !injected) firstUser = text;
 
     if (doc.entries.size() >= kSessionEntries || bytes >= kSessionBytes) return;
     Entry e;
@@ -405,6 +475,11 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
     doc.entries.push_back(std::move(e));
   });
 
+  if (doc.tool == "codex") {
+    const auto& titles = codexTitles();
+    auto it = titles.find(doc.sessionId);
+    if (it != titles.end()) doc.title = it->second;
+  }
   if (doc.title.empty() && !firstUser.empty()) doc.title = utf8Truncate(firstUser, 48);
   if (doc.ts == 0) doc.ts = doc.mtime;
 }
@@ -434,7 +509,7 @@ void SearchIndex::loadIndexFiles() {
       if (first) {
         first = false;
         // 老版本索引没有 usage，直接不认，让下面的全量扫描重建一份
-        if (j.value("v", 0) != 3) {
+        if (j.value("v", 0) != 4) {
           oldVersion = true;
           break;
         }
@@ -479,33 +554,69 @@ void SearchIndex::loadIndexFiles() {
 void SearchIndex::run() {
   loadIndexFiles();
 
-  // 枚举两边的会话文件
+  // 枚举各家的会话文件：codebuddy / claude 是 projects/<目录>/<sid>.jsonl，
+  // codex 多一层日期：sessions/YYYY/MM/DD/rollout-*.jsonl
   std::vector<Src> srcs;
-  const std::pair<const char*, std::string> roots[] = {
-      {"codebuddy", homeDir() + "\\.codebuddy\\projects"},
-      {"claude", homeDir() + "\\.claude\\projects"},
+  struct Root {
+    const char* tool;
+    std::string dir;
+    bool byDate;
   };
+  const Root roots[] = {
+      {"codebuddy", homeDir() + "\\.codebuddy\\projects", false},
+      {"claude", homeDir() + "\\.claude\\projects", false},
+      {"codex", homeDir() + "\\.codex\\sessions", true},
+  };
+
+  auto addFile = [&](const std::wstring& full, const std::wstring& fname, const char* tool) {
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (!GetFileAttributesExW(full.c_str(), GetFileExInfoStandard, &fad)) return;
+    if (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) return;
+    Src s;
+    s.path = full;
+    s.tool = tool;
+    s.sessionId = sidFromFile(fname);
+    // codex 文件名是 rollout-<时间>-<uuid>，索引只认最后的 uuid，否则 --resume 用不了
+    if (s.tool == "codex" && s.sessionId.size() > 36) {
+      s.sessionId = s.sessionId.substr(s.sessionId.size() - 36);
+    }
+    s.mtime = fileTimeMs(fad.ftLastWriteTime);
+    s.size = (int64_t)(((uint64_t)fad.nFileSizeHigh << 32) | fad.nFileSizeLow);
+    srcs.push_back(std::move(s));
+  };
+
   for (const auto& root : roots) {
     if (stopFlag_) return;
-    const std::wstring base = utf8ToWide(root.second);
+    const std::wstring base = utf8ToWide(root.dir);
     if (!isDirW(base)) continue;
-    for (const auto& proj : listDirW(base)) {
-      const std::wstring projPath = base + L"\\" + proj;
-      if (!isDirW(projPath)) continue;
-      for (const auto& fname : listDirW(projPath)) {
-        if (fname.size() < 7) continue;
-        if (fname.compare(fname.size() - 6, 6, L".jsonl") != 0) continue;
-        const std::wstring full = projPath + L"\\" + fname;
-        WIN32_FILE_ATTRIBUTE_DATA fad{};
-        if (!GetFileAttributesExW(full.c_str(), GetFileExInfoStandard, &fad)) continue;
-        if (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-        Src s;
-        s.path = full;
-        s.tool = root.first;
-        s.sessionId = sidFromFile(fname);
-        s.mtime = fileTimeMs(fad.ftLastWriteTime);
-        s.size = (int64_t)(((uint64_t)fad.nFileSizeHigh << 32) | fad.nFileSizeLow);
-        srcs.push_back(std::move(s));
+    if (root.byDate) {
+      for (const auto& y : listDirW(base)) {
+        if (y.size() != 4) continue;
+        const std::wstring wy = base + L"\\" + y;
+        if (!isDirW(wy)) continue;
+        for (const auto& mo : listDirW(wy)) {
+          if (mo.size() != 2) continue;
+          const std::wstring wm = wy + L"\\" + mo;
+          if (!isDirW(wm)) continue;
+          for (const auto& d : listDirW(wm)) {
+            if (d.size() != 2) continue;
+            const std::wstring wd = wm + L"\\" + d;
+            if (!isDirW(wd)) continue;
+            for (const auto& f : listDirW(wd)) {
+              if (f.size() < 7 || f.compare(f.size() - 6, 6, L".jsonl") != 0) continue;
+              addFile(wd + L"\\" + f, f, root.tool);
+            }
+          }
+        }
+      }
+    } else {
+      for (const auto& proj : listDirW(base)) {
+        const std::wstring projPath = base + L"\\" + proj;
+        if (!isDirW(projPath)) continue;
+        for (const auto& f : listDirW(projPath)) {
+          if (f.size() < 7 || f.compare(f.size() - 6, 6, L".jsonl") != 0) continue;
+          addFile(projPath + L"\\" + f, f, root.tool);
+        }
       }
     }
   }

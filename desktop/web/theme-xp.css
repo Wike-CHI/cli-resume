@@ -1417,3 +1417,6 @@ html[data-skin="xp"] .batch-btn {
   box-shadow: inset 0 1px 0 #ffffff;
 }
 html[data-skin="xp"] .batch-btn:hover { background: linear-gradient(180deg, #ffffff, #d9e8ff); }
+
+html[data-skin="xp"] .tool-chip.cx { color: #006000; }
+html[data-skin="xp"] .tool-dot.cx { background: #006000; }

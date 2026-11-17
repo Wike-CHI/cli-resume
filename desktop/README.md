@@ -187,6 +187,39 @@ cli-resume.exe --win <slug> --only "D:\AI	mux-windows"
 全局热键只注册在主窗口：热键是系统级独占资源，工作区窗口再注册会失败（日志里能看到
 `hotkey ... failed`），也没必要——热键拉起主窗口就够。
 
+## 多个 agent 的会话
+
+三家格式完全不同，但都算「一个会话一个文件」，所以只在读的地方分支：
+
+| agent | 布局 | 要点 |
+|---|---|---|
+| codebuddy | `projects/<编码目录>/<sid>.jsonl` | 一行一条消息，`aiTitle` 在文件尾 |
+| claude | 同上 | 同一条回复会拆成多行写，按 `message.id` 合并 |
+| codex | `sessions/YYYY/MM/DD/rollout-*.jsonl` | 多一层日期目录，`session_meta` 在首行 |
+
+Codex 这块有三个坑，都写在代码注释里：
+
+- **标题别从正文抓。** 第一条 user 消息往往是整份 `AGENTS.md` 注入，又长又没意义。
+  `~/.codex/session_index.jsonl` 里有它自己写的 `thread_name`（比如「梳理迁移工作台七阶段进展」），
+  直接用它；索引里没有的才回退到正文第一条「人话」
+- **subagent 要跳过。** 同一套动作会派生 guardian 审查线程，它们的 rollout 也是独立文件。
+  `session_meta.source` 是对象（带 `subagent`）或 `thread_source` 以 `guardian` 开头的都丢掉，
+  否则列表里一个动作能刷出四五条
+- **续接是子命令。** `codex resume <uuid>`，不是 `--resume`；uuid 取文件名末尾 36 位，
+  不是整条 `rollout-2026-11-09T13-19-32-...`
+
+用量也要拆：codex 的 `input_tokens` 里**含** `cached_input_tokens`，按 claude 的算法会重复计，
+所以 `in = input - cached`，缓存单独记一栏。
+
+### 只检测、不接入的
+
+`GET /api/agents` 扫一遍已知目录，返回装了哪些 agent、各自多少会话。左栏 DIAGNOSTIC 用
+✓（已接入）/ ·（仅检测）区分。Kimi、Qoder 的会话是私有结构（`state.json` + 事件日志），
+没有稳定格式可依赖，先只报数量；Qwen Code 本机还没产生会话。
+
+加第四家的工作量是固定的五处：`scanner.cpp` 列表、`search.cpp` 索引、`launcher.cpp` 续接命令、
+`exportmd.cpp` 导出、统计里的用量字段。检测那一处只是 `detectAgents()` 里加一行。
+
 ## 怎么定位会话的
 
 ```
@@ -452,7 +485,7 @@ ico 一共 7 帧：16 / 24 用 `icon-small.svg` 那套画法（去掉后层卡�
 
 - 只支持 Windows。内嵌终端依赖 ConPTY（Windows 10 1809 及以上）；选「外部终端」时才需要
   装 Windows Terminal。
-- 只认 codebuddy / claude 两套历史格式。
+- 只完整支持 codebuddy / claude / codex 三套历史格式；Kimi、Qoder、Qwen Code 只做检测。
 - 扫描是同步的，上千个会话会开始卡；目前量级够用。
 - 复盘要有一个本机模型在跑（Ollama / LM Studio / 任何 OpenAI 兼容服务）。没有也能用，
   只是退回「最近几条原文」，不会自动帮你装模型。

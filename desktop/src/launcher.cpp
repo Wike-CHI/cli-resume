@@ -51,6 +51,11 @@ std::string quoteArg(const std::string& a) {
 }
 
 std::string resumeCommand(const LaunchItem& it, bool useContinue) {
+  // codex 的续接是子命令，参数也不叫 --resume，别按 claude 那套拼
+  if (it.tool == "codex") {
+    if (useContinue || it.sessionId.empty()) return "codex resume --last";
+    return "codex resume " + it.sessionId;
+  }
   const char* bin = (it.tool == "claude") ? "claude" : "codebuddy";
   if (useContinue || it.sessionId.empty()) return bin;
   return std::string(bin) + " --resume " + it.sessionId;

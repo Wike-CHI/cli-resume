@@ -2,7 +2,7 @@
 
 重启电脑后，把 `codebuddy` / `claude` 的终端现场一把拉回来。
 
-不维护项目清单、不记笔记、不用手动 `cd` —— 直接读两个 CLI 自己落的会话历史，
+不维护项目清单、不记笔记、不用手动 `cd` —— 直接读各个 CLI 自己落的会话历史，
 还原出「上次在哪些目录干活、会话 id 是多少」，然后 `--resume` 回去。
 桌面端还能把会话直接开在应用自己的终端面板里（ConPTY + xterm.js），不再弹外部终端窗口；
 多个会话并排看，也能随时切回外部终端。想不起上次在哪个目录说过某件事，回车直接搜会话正文。
@@ -21,6 +21,22 @@
 
 选择记在 `settings.json` 里，下次启动就是上次那套。任何程序里按 **Ctrl+Shift+Space** 都能把窗口
 拉出来，再按一次收起 —— 不用去任务栏找。
+
+## 支持哪些 agent
+
+| agent | 会话位置 | 支持程度 |
+|---|---|---|
+| CodeBuddy CLI | `~/.codebuddy/projects/<目录>/<sid>.jsonl` | 全量：列表 / 搜索 / 恢复 / 导出 / 统计 |
+| Claude Code | `~/.claude/projects/<目录>/<sid>.jsonl` | 全量 |
+| Codex CLI | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | 全量（`codex resume <id>`） |
+| Kimi CLI | `~/.kimi-code/sessions/*/session_*` | 仅检测：显示数量，暂不能恢复 |
+| Qoder | `~/.qoder/projects/<项目>/<sid>` | 仅检测 |
+| Qwen Code | `~/.qwen` | 仅检测（本机还没产生会话） |
+
+左栏 DIAGNOSTIC 会列出本机装了哪些 agent、各自多少会话：✓ 是已接入，· 是检测到但暂不支持。
+检测只读目录，不解析内容，所以很快；不支持的那几个格式是私有的，等有稳定的读取方式再接。
+
+<img src="desktop/docs/agents.png" width="880" alt="自检区：本机各个 agent 的会话数量">
 
 ## 工作区窗口
 
@@ -105,7 +121,7 @@ bin\cli-resume.exe
 
 `desktop/src/terminal.cpp` 用 ConPTY 起一个真 shell（优先 PowerShell 7，退回系统自带的 5.1），
 前端是 xterm.js，中间一条 WebSocket，二进制帧传 PTY 的原始字节。子进程拿到的是真正的 TTY，
-codebuddy / claude 的颜色、光标、按键、TUI 布局和在终端窗口里完全一样。
+codebuddy / claude / codex 的颜色、光标、按键、TUI 布局和在终端窗口里完全一样。
 
 - **并排**：面板顶部「▧」以当前窗格的目录再开一个；2 个并排，3~4 个两行两列
 - **切换**：顶部标签点哪个，键盘就归哪个；亮边框的是当前窗格
@@ -198,7 +214,8 @@ UTF-8 中文字节会被解成乱码，其中某些字节还能把后面的换�
 ## 边界
 
 - 只支持 Windows，终端用 Windows Terminal（`wt.exe`）。没有 `wt` 就没有标签页这一说。
-- 只认 `codebuddy` 和 `claude` 两套历史格式。别家 CLI 的落盘格式变了就得跟着改。
+- 完整支持 `codebuddy`、`claude`、`codex` 三套历史格式；Kimi / Qoder / Qwen Code 只检测数量。
+  别家 CLI 的落盘格式变了就得跟着改。
 - **能不能真续上，取决于 CLI 自己的鉴权状态。** 工具只负责把正确的命令和正确的目录递过去；
   没登录、模型配置不认，终端里照样会报错。好在标签用 `-NoExit` 打开，报错留在窗口里不会闪退。
 - 扫描是同步的，几千个会话时会慢。目前 70 多条对话的量级，扫描 30ms 上下。

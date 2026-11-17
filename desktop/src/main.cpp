@@ -116,6 +116,17 @@ std::string actionScript(const std::string& act) {
     // 点第一条会话的「导出」：验证前端动作链（示例模式下只会弹提示）
     return "var b=document.querySelector('[data-export]');if(b)b.click();";
   }
+  if (act == "doctor") {
+    // 把诊断区滚进视野并把文本打到日志：验证各 agent 的检测结果
+    return "var d=document.getElementById('doctor');if(d){d.scrollIntoView({block:'end'});"
+           "fetch('/api/log',{method:'POST',body:'doctor '+d.innerText.replace(/\n/g,' | ')});}";
+  }
+  if (act == "cmdtest") {
+    // 只做验证：把第一个 codex 会话的启动命令打到后端日志，不真的开终端
+    return "var w=S.all.find(function(x){return x.sessions&&x.sessions.some(function(s){return s.tool==='codex';});});"
+           "if(w){var s=w.sessions.find(function(x){return x.tool==='codex';});"
+           "fetch('/api/log',{method:'POST',body:'cmdtest '+termCmdFor(s)});}";
+  }
   if (act == "favonly") {
     // 勾上「只看收藏」：验证收藏过滤与置顶顺序
     return "var c=document.getElementById('opt-fav');if(c){c.checked=true;c.dispatchEvent(new Event('change'));}";

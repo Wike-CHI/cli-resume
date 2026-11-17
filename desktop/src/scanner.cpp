@@ -1,6 +1,7 @@
 #include "scanner.h"
 
 #include <algorithm>
+#include <fstream>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -470,6 +471,144 @@ bool excluded(const std::string& cwdLower, const std::vector<std::string>& rules
   return false;
 }
 
+// ---------------- codex ----------------
+// 布局是 sessions/YYYY/MM/DD/rollout-*.jsonl，日期目录比 claude 多一层。
+// session_meta 里带 cwd 和 id；subagent（guardian 审查）的会话要跳过，
+// 否则同一个动作会在列表里刷出好几条。
+struct CodexSniff {
+  std::string cwd;
+  std::string sid;
+  std::string title;
+  bool subagent = false;
+};
+
+CodexSniff sniffCodex(const std::wstring& path) {
+  CodexSniff out;
+  std::string head;
+  if (!readFileHead(path, kSniffBytes, head) || head.empty()) return out;
+
+  size_t pos = 0;
+  int lines = 0;
+  while (pos < head.size() && lines < 400) {
+    size_t nl = head.find('\n', pos);
+    if (nl == std::string::npos) nl = head.size();
+    std::string line = head.substr(pos, nl - pos);
+    pos = nl + 1;
+    ++lines;
+    if (line.size() < 8) continue;
+
+    if (out.cwd.empty() && line.find("\"session_meta\"") != std::string::npos) {
+      try {
+        json j = json::parse(line);
+        json p = jval(j, "payload");
+        if (p.is_object()) {
+          out.cwd = jstr(p, "cwd");
+          out.sid = jstr(p, "id");
+          json src = jval(p, "source");
+          if (src.is_object() && src.contains("subagent")) out.subagent = true;
+          if (jstr(p, "thread_source").rfind("guardian", 0) == 0) out.subagent = true;
+        }
+      } catch (...) {
+      }
+      continue;
+    }
+
+    if (out.title.empty() && line.find("\"response_item\"") != std::string::npos &&
+        line.find("\"user\"") != std::string::npos) {
+      try {
+        json j = json::parse(line);
+        json p = jval(j, "payload");
+        if (jstr(p, "type") == "message" && jstr(p, "role") == "user") {
+          json content = jval(p, "content");
+          if (content.is_array()) {
+            for (const auto& c : content) {
+              if (jstr(c, "type") != "input_text") continue;
+              std::string t = jstr(c, "text");
+              if (t.empty()) continue;
+              // 这几类都是 CLI 塞进来的上下文，不是人说的话
+              if (t[0] == '<' || t.rfind("# AGENTS.md", 0) == 0 ||
+                  t.rfind("The following is", 0) == 0) {
+                continue;
+              }
+              out.title = t;
+              break;
+            }
+          }
+        }
+      } catch (...) {
+      }
+    }
+  }
+  out.title = oneLine(out.title, 48);
+  return out;
+}
+
+void collectCodex(const std::string& root, int64_t cutoff, std::vector<RawSession>& out,
+                  bool* found) {
+  const std::wstring base = utf8ToWide(root);
+  bool isDir = false;
+  if (!pathExists(base, &isDir) || !isDir) return;
+  if (found) *found = true;
+
+  // session_index.jsonl 里有 codex 自己写的 thread_name（真正的标题），
+  // 正文第一条往往是巨大的 AGENTS.md 注入，抓出来当标题又长又没意义
+  std::unordered_map<std::string, std::string> titles;
+  {
+    std::ifstream f(utf8ToWide(homeDir() + "\\.codex\\session_index.jsonl"), std::ios::binary);
+    std::string line;
+    while (std::getline(f, line)) {
+      if (line.find("\"thread_name\"") == std::string::npos) continue;
+      try {
+        json j = json::parse(line);
+        const std::string id = jstr(j, "id");
+        const std::string name = jstr(j, "thread_name");
+        if (!id.empty() && !name.empty()) titles[id] = oneLine(name, 48);
+      } catch (...) {
+      }
+    }
+  }
+
+  int taken = 0;
+  for (const auto& y : listDir(base)) {
+    if (y.size() != 4) continue;
+    const std::wstring wy = base + L"\\" + y;
+    for (const auto& m : listDir(wy)) {
+      if (m.size() != 2) continue;
+      const std::wstring wm = wy + L"\\" + m;
+      for (const auto& d : listDir(wm)) {
+        if (d.size() != 2) continue;
+        const std::wstring wd = wm + L"\\" + d;
+        for (const auto& f : listDir(wd)) {
+          if (f.size() < 7) continue;
+          if (f.compare(f.size() - 6, 6, L".jsonl") != 0) continue;
+
+          const std::wstring full = wd + L"\\" + f;
+          WIN32_FILE_ATTRIBUTE_DATA fad{};
+          if (!GetFileAttributesExW(full.c_str(), GetFileExInfoStandard, &fad)) continue;
+          if (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+          const int64_t mtime = fileTimeToMs(fad.ftLastWriteTime);
+          if (cutoff > 0 && mtime < cutoff) continue;
+
+          std::string sid = wideToUtf8(f);
+          sid.resize(sid.size() - 6);
+          if (sid.size() > 36) sid = sid.substr(sid.size() - 36);  // 文件名尾部的 UUID
+
+          CodexSniff sn = sniffCodex(full);
+          if (sn.subagent || sn.cwd.empty()) continue;
+
+          auto hit = titles.find(sid);
+          const std::string title = hit != titles.end() ? hit->second : sn.title;
+          if (title.empty()) continue;
+
+          out.push_back({"codex", sn.cwd, sid, title, mtime});
+          if (++taken > 800) return;  // 会话再多也不至于让人翻八百条
+        }
+      }
+    }
+  }
+  logf("codex sessions=" + std::to_string(taken));
+}
+
 }  // namespace
 
 std::string encodeProjectDir(const std::string& p) {
@@ -499,6 +638,7 @@ ScanResult scanAll(const ScanOptions& opts) {
   ScanResult res;
   res.codebuddyRoot = homeDir() + "\\.codebuddy\\projects";
   res.claudeRoot = homeDir() + "\\.claude\\projects";
+  res.codexRoot = homeDir() + "\\.codex\\sessions";
 
   int64_t cutoff = opts.maxAgeHours > 0 ? t0 - (int64_t)opts.maxAgeHours * 3600LL * 1000LL : 0;
 
@@ -509,6 +649,9 @@ ScanResult scanAll(const ScanOptions& opts) {
   if (opts.includeClaude) {
     auto map = loadClaudeCwdMap();
     collectTool("claude", res.claudeRoot, cutoff, map, rows, &res.claudeFound);
+  }
+  if (opts.includeCodex) {
+    collectCodex(res.codexRoot, cutoff, rows, &res.codexFound);
   }
   res.totalSessions = static_cast<int>(rows.size());
 

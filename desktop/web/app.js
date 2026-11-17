@@ -50,6 +50,7 @@ const S = {
   },
   stats: {},
   roots: {},
+  agents: null,   // 本机装了哪些 agent（/api/agents）
   busy: false,
   deep: null,   // 全文搜索结果：null 表示当前是普通列表
   brief: null,  // 本地模型复盘：null 表示没在这个视图
@@ -238,7 +239,7 @@ function renderSkeleton() {
 }
 
 function sessionRowHtml(ws, s, index) {
-  const cls = s.tool === 'claude' ? 'cl' : 'cb';
+  const cls = s.tool === 'claude' ? 'cl' : (s.tool === 'codex' ? 'cx' : 'cb');
   const extra = index >= INLINE_SESSIONS ? ' sess-extra' : '';
   const title = s.title || '（没有标题的会话）';
   const fav = isFav(s);
@@ -276,7 +277,7 @@ function itemHtml(w, index) {
   // 一个目录下两个 CLI 混着用，标签按 tool 去重
   const tools = [...new Set(sessions.map((s) => s.tool))];
   const chips = tools.map((t) => {
-    const cls = t === 'claude' ? 'cl' : 'cb';
+    const cls = t === 'claude' ? 'cl' : (t === 'codex' ? 'cx' : 'cb');
     return `<span class="tool-chip ${cls}"><i></i>${esc(t)}</span>`;
   }).join('');
 
@@ -1442,14 +1443,51 @@ $('set-save').addEventListener('click', async () => {
 
 function renderDoctor() {
   const box = $('doctor');
+  if (!box) return;
   const r = S.roots || {};
-  const row = (ok, text) =>
-    `<div class="doc-row"><span class="mark ${ok ? 'ok' : 'bad'}">${ok ? '✓' : '×'}</span><span class="txt">${esc(text)}</span></div>`;
-  box.innerHTML = [
-    row(!!r.codebuddyFound, 'codebuddy：' + (r.codebuddy || '')),
-    row(!!r.claudeFound, 'claude：' + (r.claude || '')),
-    row(true, `${S.all.length} 个可用目录 / ${S.stats.totalSessions || 0} 个对话`),
-  ].join('');
+  // ok = 已接入；mid = 只检测到、暂不支持恢复
+  const row = (state, text) => {
+    const cls = state === 'mid' ? 'mid' : (state ? 'ok' : 'bad');
+    const glyph = state === 'mid' ? '·' : (state ? '✓' : '×');
+    return `<div class="doc-row"><span class="mark ${cls}">${glyph}</span>` +
+      `<span class="txt">${esc(text)}</span></div>`;
+  };
+
+  const lines = [];
+  const agents = S.agents || [];
+  if (agents.length) {
+    for (const a of agents) {
+      const full = a.support === 'full';
+      lines.push(row(full ? true : 'mid',
+        `${a.name}：${full ? '' : '仅检测 · '}${a.sessions} 个会话`));
+    }
+  } else {
+    lines.push(row(!!r.codebuddyFound, 'codebuddy：' + (r.codebuddy || '')));
+    lines.push(row(!!r.claudeFound, 'claude：' + (r.claude || '')));
+  }
+  lines.push(row(true, `${S.all.length} 个可用目录 / ${S.stats.totalSessions || 0} 个对话`));
+  box.innerHTML = lines.join('');
+}
+
+async function loadAgents() {
+  if (DEMO) {
+    // 示例模式给一份和示例数据量级对得上的清单，别把本机真实会话数混进截图
+    S.agents = [
+      { id: 'codebuddy', name: 'CodeBuddy CLI', support: 'full', sessions: 20 },
+      { id: 'claude', name: 'Claude Code', support: 'full', sessions: 7 },
+      { id: 'codex', name: 'Codex CLI', support: 'full', sessions: 6 },
+      { id: 'kimi', name: 'Kimi CLI', support: 'detect', sessions: 2 },
+    ];
+    renderDoctor();
+    return;
+  }
+  try {
+    const r = await fetch('/api/agents').then((x) => x.json());
+    S.agents = r.agents || [];
+    renderDoctor();
+  } catch (e) {
+    // 探测失败就退回只看 codebuddy/claude 两行
+  }
 }
 
 // ---------------- 内嵌终端 ----------------
@@ -1815,6 +1853,11 @@ function termClosePane(pane) {
 }
 
 function termCmdFor(it) {
+  if (it.tool === 'codex') {
+    // codex 用子命令续接，--last 是它自己的「最近一个」
+    if (S.settings.useContinue || !it.sessionId) return 'codex resume --last';
+    return `codex resume ${it.sessionId}`;
+  }
   const bin = it.tool === 'claude' ? 'claude' : 'codebuddy';
   if (S.settings.useContinue || !it.sessionId) return bin;
   return `${bin} --resume ${it.sessionId}`;
@@ -1940,6 +1983,7 @@ setInterval(tickClock, 1000);
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
 initOnlyChip();
 loadAutoStart();
+loadAgents();
 // 先读收藏再扫目录：首屏就是「收藏在前的顺序」，不会先抖一下
 loadFavorites()
   .then(() => load(false))

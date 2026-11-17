@@ -52,8 +52,98 @@ json defaultSettings() {
   };
 }
 
-bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::string& err) {
-  wchar_t exe[MAX_PATH] = {0};
+// 数一下某个目录下（限定层数）指定后缀的文件。探测阶段只数文件，不解析内容
+int countFilesDeep(const std::wstring& dir, int depth, const wchar_t* ext) {
+  int n = 0;
+  WIN32_FIND_DATAW fd{};
+  HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+  if (h == INVALID_HANDLE_VALUE) return 0;
+  do {
+    const std::wstring name = fd.cFileName;
+    if (name == L"." || name == L"..") continue;
+    const std::wstring full = dir + L"\\" + name;
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      if (depth > 0) n += countFilesDeep(full, depth - 1, ext);
+      continue;
+    }
+    const size_t el = wcslen(ext);
+    if (name.size() > el && name.compare(name.size() - el, el, ext) == 0) ++n;
+  } while (FindNextFileW(h, &fd));
+  FindClose(h);
+  return n;
+}
+
+int countLines(const std::wstring& path) {
+  std::ifstream f(path, std::ios::binary);
+  if (!f) return 0;
+  int n = 0;
+  std::string line;
+  while (std::getline(f, line)) {
+    if (!line.empty()) ++n;
+  }
+  return n;
+}
+
+// qoder 的会话是 projects/<项目>/<sessionId>/state.json，数 state.json 就行
+int countQoderSessions(const std::wstring& root) {
+  int n = 0;
+  WIN32_FIND_DATAW fd{};
+  HANDLE h = FindFirstFileW((root + L"\\*").c_str(), &fd);
+  if (h == INVALID_HANDLE_VALUE) return 0;
+  do {
+    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+    if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+    n += countFilesDeep(root + L"\\" + fd.cFileName, 1, L".json");
+  } while (FindNextFileW(h, &fd));
+  FindClose(h);
+  return n;
+}
+
+bool dirExists(const std::wstring& p) {
+  const DWORD a = GetFileAttributesW(p.c_str());
+  return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// 本机装了哪些 coding agent、各自有多少会话。已接入的会标 full，其余只报数量
+json detectAgents() {
+  const std::wstring home = utf8ToWide(homeDir());
+  json out = json::array();
+
+  struct Row {
+    const char* id;
+    const char* name;
+    const char* support;
+    std::wstring dir;
+    int sessions;
+  };
+  const Row rows[] = {
+      {"codebuddy", "CodeBuddy CLI", "full", home + L"\\.codebuddy\\projects",
+       countFilesDeep(home + L"\\.codebuddy\\projects", 1, L".jsonl")},
+      {"claude", "Claude Code", "full", home + L"\\.claude\\projects",
+       countFilesDeep(home + L"\\.claude\\projects", 1, L".jsonl")},
+      // codex 的会话文件里混着大量 subagent（guardian）rollout，数文件会虚高；
+      // session_index 里才是用户真正开过的线程
+      {"codex", "Codex CLI", "full", home + L"\\.codex\\sessions",
+       countLines(home + L"\\.codex\\session_index.jsonl")},
+      {"kimi", "Kimi CLI", "detect", home + L"\\.kimi-code\\sessions",
+       countLines(home + L"\\.kimi-code\\session_index.jsonl")},
+      {"qoder", "Qoder", "detect", home + L"\\.qoder\\projects",
+       countQoderSessions(home + L"\\.qoder\\projects")},
+      {"qwen", "Qwen Code", "detect", home + L"\\.qwen", 0},
+  };
+  for (const auto& r : rows) {
+    const bool found = dirExists(r.dir);
+    if (!found) continue;
+    out.push_back({{"id", r.id},
+                   {"name", r.name},
+                   {"support", r.support},
+                   {"found", true},
+                   {"sessions", r.sessions}});
+  }
+  return json{{"ok", true}, {"agents", out}};
+}
+
+bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::string& err) {  wchar_t exe[MAX_PATH] = {0};
   if (!GetModuleFileNameW(nullptr, exe, MAX_PATH)) {
     err = "拿不到自己的路径";
     return false;
@@ -336,6 +426,12 @@ void Backend::setupRoutes() {
     }
     res.set_header("Cache-Control", "no-store");
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 本机装了哪些 agent（已接入的 + 只检测的），给左栏自检用
+  srv_.Get("/api/agents", [](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(detectAgents()), "application/json; charset=utf-8");
   });
 
   // ---------------- 收藏 ----------------

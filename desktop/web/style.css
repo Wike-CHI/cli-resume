@@ -470,6 +470,7 @@ html, body {
 .doc-row .mark { flex-shrink: 0; font-family: var(--mono); font-weight: 700; }
 .doc-row .mark.ok { color: var(--lime); text-shadow: 0 0 8px rgba(var(--lime-rgb), .5); }
 .doc-row .mark.bad { color: var(--magenta); text-shadow: var(--glow-mag); }
+.doc-row .mark.mid { color: var(--muted); text-shadow: none; }
 .doc-row span.txt {
   font-family: var(--mono);
   font-size: 9.5px;
@@ -783,6 +784,7 @@ html, body {
 }
 .tool-chip.cb { color: #3fdcff; }
 .tool-chip.cl { color: #ff6fb3; }
+.tool-chip.cx { color: #8cff3f; }
 
 .dot-sep { color: rgba(255, 255, 255, .16); }
 .ws-when { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -891,6 +893,7 @@ html, body {
 }
 .tool-dot.cb { background: #3fdcff; box-shadow: 0 0 7px #3fdcff; }
 .tool-dot.cl { background: #ff6fb3; box-shadow: 0 0 7px #ff6fb3; }
+.tool-dot.cx { background: #8cff3f; box-shadow: 0 0 7px #8cff3f; }
 
 .sess-title {
   flex: 1;

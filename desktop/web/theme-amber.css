@@ -375,3 +375,11 @@ html[data-skin="amber"] .toast {
 html[data-skin="amber"] .caret { border-top-color: var(--faint); }
 html[data-skin="amber"] .ws-item.open .caret,
 html[data-skin="amber"] .ws-card:hover .caret { border-top-color: var(--cyan); }
+
+/* 单色屏上没有「品牌色」，三种 CLI 只能靠亮度区分 */
+html[data-skin="amber"] .tool-chip.cb { color: var(--text); }
+html[data-skin="amber"] .tool-chip.cl { color: var(--amber); }
+html[data-skin="amber"] .tool-chip.cx { color: var(--muted); }
+html[data-skin="amber"] .tool-dot.cb { background: var(--text); box-shadow: none; }
+html[data-skin="amber"] .tool-dot.cl { background: var(--amber); box-shadow: none; }
+html[data-skin="amber"] .tool-dot.cx { background: var(--muted); box-shadow: none; }

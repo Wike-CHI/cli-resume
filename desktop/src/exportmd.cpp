@@ -99,7 +99,39 @@ std::string sanitize(const std::string& s) {
   return o.empty() ? std::string("session") : o;
 }
 
+bool findFileRec(const std::wstring& dir, const std::wstring& needle, std::wstring& found,
+                 int depth) {
+  WIN32_FIND_DATAW fd{};
+  HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+  if (h == INVALID_HANDLE_VALUE) return false;
+  bool ok = false;
+  do {
+    const std::wstring name = fd.cFileName;
+    if (name == L"." || name == L"..") continue;
+    const std::wstring full = dir + L"\\" + name;
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      if (depth > 0 && findFileRec(full, needle, found, depth - 1)) {
+        ok = true;
+        break;
+      }
+    } else if (name.find(needle) != std::wstring::npos) {
+      found = full;
+      ok = true;
+      break;
+    }
+  } while (FindNextFileW(h, &fd));
+  FindClose(h);
+  return ok;
+}
+
 std::wstring findSessionFile(const std::string& tool, const std::string& sid) {
+  if (tool == "codex") {
+    // sessions/YYYY/MM/DD/rollout-<时间>-<uuid>.jsonl，按 uuid 在文件名里找
+    std::wstring found;
+    const std::wstring base = utf8ToWide(homeDir()) + L"\\.codex\\sessions";
+    if (findFileRec(base, utf8ToWide(sid), found, 4)) return found;
+    return L"";
+  }
   const wchar_t* root = (tool == "claude") ? L"\\.claude\\projects" : L"\\.codebuddy\\projects";
   const std::wstring base = utf8ToWide(homeDir()) + root;
   const std::wstring want = utf8ToWide(sid) + L".jsonl";
@@ -181,6 +213,63 @@ ExportResult exportSession(const std::string& tool, const std::string& sid, cons
     if (!j.is_object()) continue;
 
     const std::string t = jstr(j, "type");
+
+    // ---- codex ----
+    if (t == "session_meta") {
+      json p = jval(j, "payload");
+      if (sessionCwd.empty()) sessionCwd = jstr(p, "cwd");
+      continue;
+    }
+    if (t == "response_item") {
+      json p = jval(j, "payload");
+      const std::string pt = jstr(p, "type");
+      const std::string role = jstr(p, "role");
+      if (pt == "message" && (role == "user" || role == "assistant")) {
+        std::string text;
+        json content = jval(p, "content");
+        if (content.is_array()) {
+          for (const auto& b : content) {
+            const std::string bt = jstr(b, "type");
+            if (bt == "input_text" || bt == "output_text" || bt == "text") {
+              const std::string x = jstr(b, "text");
+              if (!x.empty()) text += (text.empty() ? "" : "\n\n") + x;
+            }
+          }
+        } else if (content.is_string()) {
+          text = content.get<std::string>();
+        }
+        if (text.empty()) continue;
+        if (text.rfind("# AGENTS.md", 0) == 0 || (role == "user" && isNoise(text))) continue;
+
+        Turn tn;
+        tn.assistant = (role != "user");
+        tn.ts = tsOf(j);
+        tn.body = trim(text);
+        turns.push_back(std::move(tn));
+        if (tn.ts > 0) {
+          if (!firstTs) firstTs = tn.ts;
+          lastTs = tn.ts;
+        }
+      } else if (pt == "function_call" || pt == "custom_tool_call") {
+        const std::string name = jstr(p, "name");
+        json args = jval(p, "arguments");
+        const std::string argStr = args.is_string() ? args.get<std::string>() : args.dump();
+        std::string body;
+        appendTool(body, name, argStr);
+        body = trim(body);
+        if (!turns.empty() && turns.back().assistant) {
+          turns.back().body += std::string("\n\n") + body;
+        } else {
+          Turn tn;
+          tn.assistant = true;
+          tn.ts = tsOf(j);
+          tn.body = body;
+          turns.push_back(std::move(tn));
+        }
+      }
+      continue;
+    }
+
     if (t == "ai-title") {
       std::string a = jstr(j, "aiTitle");
       if (!a.empty()) sessionTitle = a;
