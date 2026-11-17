@@ -190,6 +190,9 @@ const SKIN_NAME = {
   neon: '80s 霓虹 CRT', amber: '70s 琥珀终端', win98: 'Windows 98', xp: 'Windows XP Luna',
 };
 
+// 每家 CLI 一个色标，卡片标签和会话行的圆点共用
+const TOOL_CLS = { claude: 'cl', codex: 'cx', kimi: 'km', codebuddy: 'cb' };
+
 function applyTheme(name) {
   const skin = SKINS.includes(name) ? name : 'neon';
   S.settings.theme = skin;
@@ -239,7 +242,7 @@ function renderSkeleton() {
 }
 
 function sessionRowHtml(ws, s, index) {
-  const cls = s.tool === 'claude' ? 'cl' : (s.tool === 'codex' ? 'cx' : 'cb');
+  const cls = TOOL_CLS[s.tool] || 'cb';
   const extra = index >= INLINE_SESSIONS ? ' sess-extra' : '';
   const title = s.title || '（没有标题的会话）';
   const fav = isFav(s);
@@ -277,7 +280,7 @@ function itemHtml(w, index) {
   // 一个目录下两个 CLI 混着用，标签按 tool 去重
   const tools = [...new Set(sessions.map((s) => s.tool))];
   const chips = tools.map((t) => {
-    const cls = t === 'claude' ? 'cl' : (t === 'codex' ? 'cx' : 'cb');
+    const cls = TOOL_CLS[t] || 'cb';
     return `<span class="tool-chip ${cls}"><i></i>${esc(t)}</span>`;
   }).join('');
 
@@ -1858,6 +1861,11 @@ function termCmdFor(it) {
     if (S.settings.useContinue || !it.sessionId) return 'codex resume --last';
     return `codex resume ${it.sessionId}`;
   }
+  // kimi 用 -S：id 是 session_<uuid>，不带 id 会进交互选择
+  if (it.tool === 'kimi') {
+    if (S.settings.useContinue || !it.sessionId) return 'kimi -c';
+    return `kimi -S ${it.sessionId}`;
+  }
   const bin = it.tool === 'claude' ? 'claude' : 'codebuddy';
   if (S.settings.useContinue || !it.sessionId) return bin;
   return `${bin} --resume ${it.sessionId}`;
@@ -1979,6 +1987,12 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 1000);
+
+// 窗口收进托盘后，装饰动画（CRT 光带、呼吸灯）没有任何意义，
+// 但在弱显卡上它们是实打实的合成开销。不可见就停掉，回来再开。
+document.addEventListener('visibilitychange', () => {
+  document.body.classList.toggle('page-idle', document.hidden);
+});
 
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
 initOnlyChip();

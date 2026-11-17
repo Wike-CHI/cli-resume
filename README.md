@@ -29,12 +29,16 @@
 | CodeBuddy CLI | `~/.codebuddy/projects/<目录>/<sid>.jsonl` | 全量：列表 / 搜索 / 恢复 / 导出 / 统计 |
 | Claude Code | `~/.claude/projects/<目录>/<sid>.jsonl` | 全量 |
 | Codex CLI | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | 全量（`codex resume <id>`） |
-| Kimi CLI | `~/.kimi-code/sessions/*/session_*` | 仅检测：显示数量，暂不能恢复 |
-| Qoder | `~/.qoder/projects/<项目>/<sid>` | 仅检测 |
+| Kimi CLI | `~/.kimi-code/sessions/<工作区>/session_<uuid>/` | 全量（`kimi -S session_<uuid>`） |
+| Qoder | `~/.qoder/projects/<项目>/<sid>` | 仅检测（对话不落本地） |
 | Qwen Code | `~/.qwen` | 仅检测（本机还没产生会话） |
 
 左栏 DIAGNOSTIC 会列出本机装了哪些 agent、各自多少会话：✓ 是已接入，· 是检测到但暂不支持。
-检测只读目录，不解析内容，所以很快；不支持的那几个格式是私有的，等有稳定的读取方式再接。
+检测只读目录，不解析内容，所以很快。
+
+Qoder 只做检测不是偷懒：`projects/<项目>/<sid>/state.json` 里 `data` 和 `items` 都是空的，
+`logs/sessions/.../segments/*.jsonl` 只是 hook 与 phase 生命周期日志，日志里提到的
+transcript 文件写完之后并不存在。也就是说它的对话没有落到本地，没有可读的东西。
 
 <img src="desktop/docs/agents.png" width="880" alt="自检区：本机各个 agent 的会话数量">
 

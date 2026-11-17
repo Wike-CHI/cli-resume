@@ -49,6 +49,9 @@ int64_t tsOf(const json& j) {
   json t = jval(j, "timestamp");
   if (t.is_number()) return t.get<int64_t>();
   if (t.is_string()) return isoToMs(t.get<std::string>());
+  // kimi 的时间戳字段叫 time，不在 timestamp 上
+  json k = jval(j, "time");
+  if (k.is_number()) return k.get<int64_t>();
   return 0;
 }
 
@@ -125,6 +128,27 @@ bool findFileRec(const std::wstring& dir, const std::wstring& needle, std::wstri
 }
 
 std::wstring findSessionFile(const std::string& tool, const std::string& sid) {
+  if (tool == "kimi") {
+    // sessions/<工作区>/session_<uuid>/agents/main/wire.jsonl，
+    // sid 本身就是目录名，逐层找比按文件名递归更直接
+    const std::wstring base = utf8ToWide(homeDir()) + L"\\.kimi-code\\sessions";
+    WIN32_FIND_DATAW fd{};
+    HANDLE h = FindFirstFileW((base + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return L"";
+    std::wstring found;
+    do {
+      if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+      if (fd.cFileName[0] == L'.') continue;
+      const std::wstring cand =
+          base + L"\\" + fd.cFileName + L"\\" + utf8ToWide(sid) + L"\\agents\\main\\wire.jsonl";
+      if (GetFileAttributesW(cand.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        found = cand;
+        break;
+      }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return found;
+  }
   if (tool == "codex") {
     // sessions/YYYY/MM/DD/rollout-<时间>-<uuid>.jsonl，按 uuid 在文件名里找
     std::wstring found;
@@ -266,6 +290,69 @@ ExportResult exportSession(const std::string& tool, const std::string& sid, cons
           tn.body = body;
           turns.push_back(std::move(tn));
         }
+      }
+      continue;
+    }
+
+    // ---- kimi ----
+    // 一条消息一个事件：message.message.{role, content[], toolCalls[], toolCallId}
+    if (t == "agent.message.appended") {
+      json m = jval(jval(j, "message"), "message");
+      if (!m.is_object()) continue;
+      const std::string role = jstr(m, "role");
+
+      std::string text;
+      json content = jval(m, "content");
+      if (content.is_array()) {
+        for (const auto& b : content) {
+          if (jstr(b, "type") != "text") continue;  // think 不进稿子
+          const std::string x = jstr(b, "text");
+          if (!x.empty()) text += (text.empty() ? "" : std::string("\n\n")) + x;
+        }
+      }
+
+      std::string tools;
+      json tc = jval(m, "toolCalls");
+      if (tc.is_array()) {
+        for (const auto& c : tc) {
+          std::string body;
+          appendTool(body, jstr(c, "name"), jstr(c, "arguments"));
+          if (!body.empty()) tools += (tools.empty() ? "" : std::string("\n\n")) + trim(body);
+        }
+      }
+
+      if (role == "tool") {
+        // 工具结果并进上一条助手回复，否则稿子里会散着一堆没有上下文的片段
+        if (!text.empty()) {
+          if (!turns.empty() && turns.back().assistant) {
+            turns.back().body += std::string("\n\n") + text;
+          } else {
+            Turn tn;
+            tn.assistant = true;
+            tn.ts = tsOf(j);
+            tn.body = text;
+            turns.push_back(std::move(tn));
+            if (tn.ts > 0) {
+              if (!firstTs) firstTs = tn.ts;
+              lastTs = tn.ts;
+            }
+          }
+        }
+        continue;
+      }
+
+      if (text.empty() && tools.empty()) continue;
+      if (role == "user" && isNoise(text)) continue;
+
+      Turn tn;
+      tn.assistant = (role != "user");
+      tn.ts = tsOf(j);
+      tn.body = trim(text);
+      if (!tools.empty()) tn.body += (tn.body.empty() ? "" : std::string("\n\n")) + tools;
+      turns.push_back(std::move(tn));
+      if (tn.ts > 0) {
+        if (!firstTs) firstTs = tn.ts;
+        lastTs = tn.ts;
       }
       continue;
     }

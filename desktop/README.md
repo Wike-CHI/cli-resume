@@ -189,13 +189,14 @@ cli-resume.exe --win <slug> --only "D:\AI	mux-windows"
 
 ## 多个 agent 的会话
 
-三家格式完全不同，但都算「一个会话一个文件」，所以只在读的地方分支：
+四家格式完全不同，读取只在少数几个地方分支：
 
 | agent | 布局 | 要点 |
 |---|---|---|
 | codebuddy | `projects/<编码目录>/<sid>.jsonl` | 一行一条消息，`aiTitle` 在文件尾 |
 | claude | 同上 | 同一条回复会拆成多行写，按 `message.id` 合并 |
 | codex | `sessions/YYYY/MM/DD/rollout-*.jsonl` | 多一层日期目录，`session_meta` 在首行 |
+| kimi | `sessions/<工作区>/session_<uuid>/` | 目录是会话，正文在 `agents/main/wire.jsonl` |
 
 Codex 这块有三个坑，都写在代码注释里：
 
@@ -211,13 +212,26 @@ Codex 这块有三个坑，都写在代码注释里：
 用量也要拆：codex 的 `input_tokens` 里**含** `cached_input_tokens`，按 claude 的算法会重复计，
 所以 `in = input - cached`，缓存单独记一栏。
 
+Kimi 这块的要点：
+
+- **一个会话是一个目录**，不是单文件：`state.json` 放 cwd、标题、归档标记，
+  `agents/main/wire.jsonl` 才是正文（`agent.message.appended` 事件，一条消息一条）
+- **子 agent 不进索引**：`agents/agent-3`、`agent-5` 是主线程派生的旁支，
+  和 codex 的 guardian 一个性质，只取 `agents/main`
+- **续接是 `-S`**：`kimi -S session_<uuid>`，id 就是目录名；不带 id 会进交互选择
+- **标题要洗**：kimi 有时把「提示词 + K Kimi Thinking + 推理过程」拼成一个 title，
+  截断后会带出这些标记，所以在第一个 ` Kimi Thinking` 处切断
+- **用量字段自成一套**：`usage.record` 里是 `inputOther` / `output` / `inputCacheRead` /
+  `inputCacheCreation`，528 条记录对应 540 次请求，是逐次增量而不是累计，直接相加即可
+
 ### 只检测、不接入的
 
 `GET /api/agents` 扫一遍已知目录，返回装了哪些 agent、各自多少会话。左栏 DIAGNOSTIC 用
-✓（已接入）/ ·（仅检测）区分。Kimi、Qoder 的会话是私有结构（`state.json` + 事件日志），
-没有稳定格式可依赖，先只报数量；Qwen Code 本机还没产生会话。
+✓（已接入）/ ·（仅检测）区分。Qoder 只报数量：它的 `state.json` 里 `data`/`items` 是空的，
+`logs/sessions/*/segments/*.jsonl` 只是 hook 和 phase 日志，日志里提到的 transcript 文件
+写完之后并不存在 —— 对话没有落到本地，没有可读的东西。Qwen Code 本机还没产生会话。
 
-加第四家的工作量是固定的五处：`scanner.cpp` 列表、`search.cpp` 索引、`launcher.cpp` 续接命令、
+加第五家的工作量是固定的五处：`scanner.cpp` 列表、`search.cpp` 索引、`launcher.cpp` 续接命令、
 `exportmd.cpp` 导出、统计里的用量字段。检测那一处只是 `detectAgents()` 里加一行。
 
 ## 怎么定位会话的

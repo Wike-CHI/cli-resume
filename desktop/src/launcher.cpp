@@ -56,6 +56,11 @@ std::string resumeCommand(const LaunchItem& it, bool useContinue) {
     if (useContinue || it.sessionId.empty()) return "codex resume --last";
     return "codex resume " + it.sessionId;
   }
+  // kimi 用 -S：id 就是 session_<uuid>（目录名），不带的话会进交互选择
+  if (it.tool == "kimi") {
+    if (useContinue || it.sessionId.empty()) return "kimi -c";
+    return "kimi -S " + it.sessionId;
+  }
   const char* bin = (it.tool == "claude") ? "claude" : "codebuddy";
   if (useContinue || it.sessionId.empty()) return bin;
   return std::string(bin) + " --resume " + it.sessionId;

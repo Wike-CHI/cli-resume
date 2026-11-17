@@ -125,8 +125,8 @@ json detectAgents() {
       // session_index 里才是用户真正开过的线程
       {"codex", "Codex CLI", "full", home + L"\\.codex\\sessions",
        countLines(home + L"\\.codex\\session_index.jsonl")},
-      {"kimi", "Kimi CLI", "detect", home + L"\\.kimi-code\\sessions",
-       countLines(home + L"\\.kimi-code\\session_index.jsonl")},
+      {"kimi", "Kimi CLI", "full", home + L"\\.kimi-code\\sessions",
+       countFilesDeep(home + L"\\.kimi-code\\sessions", 2, L"state.json")},
       {"qoder", "Qoder", "detect", home + L"\\.qoder\\projects",
        countQoderSessions(home + L"\\.qoder\\projects")},
       {"qwen", "Qwen Code", "detect", home + L"\\.qwen", 0},

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <sstream>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -609,6 +610,81 @@ void collectCodex(const std::string& root, int64_t cutoff, std::vector<RawSessio
   logf("codex sessions=" + std::to_string(taken));
 }
 
+// kimi 给的标题有时是「提示词 + K Kimi Thinking <推理过程>」拼起来的，
+// 直接截 48 字会把 "K Kimi Thinking" 一起带出来。在第一个标记处切断
+std::string cleanKimiTitle(std::string t) {
+  static const char* marks[] = {" Kimi Thinking", " K Kimi", "Thinking\nThe user"};
+  for (const char* m : marks) {
+    const size_t at = t.find(m);
+    if (at != std::string::npos && at > 0) t.resize(at);
+  }
+  while (!t.empty() && (t.back() == ' ' || t.back() == '\n' || t.back() == '\r')) t.pop_back();
+  if (t.size() > 2 && t[t.size() - 1] == 'K' && t[t.size() - 2] == ' ') t.resize(t.size() - 2);
+  return t;
+}
+
+// kimi：sessions/<工作区>/session_<uuid>/{state.json, agents/main/wire.jsonl}
+// 会话 id 就是目录名（kimi -S 直接认），state.json 里有 cwd / 标题 / 归档标记
+void collectKimi(const std::string& root, int64_t cutoff, std::vector<RawSession>& out,
+                 bool* found) {
+  const std::wstring base = utf8ToWide(root);
+  bool isDir = false;
+  if (!pathExists(base, &isDir) || !isDir) return;
+  if (found) *found = true;
+
+  int taken = 0;
+  int skippedArchived = 0;
+  for (const auto& wd : listDir(base)) {
+    const std::wstring wdp = base + L"\\" + wd;
+    for (const auto& sess : listDir(wdp)) {
+      if (sess.rfind(L"session_", 0) != 0) continue;
+      const std::wstring sd = wdp + L"\\" + sess;
+      // 只开过没说过话的会话没有正文，列出来是噪音
+      if (!pathExists(sd + L"\\agents\\main\\wire.jsonl", nullptr)) continue;
+
+      std::ifstream f(sd + L"\\state.json", std::ios::binary);
+      if (!f) continue;
+      std::stringstream ss;
+      ss << f.rdbuf();
+      json st;
+      try {
+        st = json::parse(ss.str());
+      } catch (...) {
+        continue;
+      }
+      if (!st.is_object()) continue;
+      // 归档的会话 kimi 自己默认也不列
+      json arch = jval(st, "archived");
+      if (arch.is_boolean() && arch.get<bool>()) {
+        ++skippedArchived;
+        continue;
+      }
+
+      const std::string cwd = jstr(st, "cwd");
+      if (cwd.empty()) continue;
+      std::string title = jstr(st, "title");
+      if (title.empty()) title = jstr(st, "lastPrompt");
+      if (title.empty()) title = "(未命名会话)";
+
+      int64_t mtime = 0;
+      json up = jval(st, "updatedAt");
+      if (up.is_number()) mtime = up.get<int64_t>();
+      if (mtime <= 0) {
+        WIN32_FILE_ATTRIBUTE_DATA fad{};
+        if (GetFileAttributesExW((sd + L"\\state.json").c_str(), GetFileExInfoStandard, &fad)) {
+          mtime = fileTimeToMs(fad.ftLastWriteTime);
+        }
+      }
+      if (cutoff > 0 && mtime < cutoff) continue;
+
+      out.push_back({"kimi", cwd, wideToUtf8(sess), oneLine(cleanKimiTitle(title), 48), mtime});
+      if (++taken > 800) return;
+    }
+  }
+  logf("kimi sessions=" + std::to_string(taken) +
+       " archived=" + std::to_string(skippedArchived));
+}
+
 }  // namespace
 
 std::string encodeProjectDir(const std::string& p) {
@@ -639,6 +715,7 @@ ScanResult scanAll(const ScanOptions& opts) {
   res.codebuddyRoot = homeDir() + "\\.codebuddy\\projects";
   res.claudeRoot = homeDir() + "\\.claude\\projects";
   res.codexRoot = homeDir() + "\\.codex\\sessions";
+  res.kimiRoot = homeDir() + "\\.kimi-code\\sessions";
 
   int64_t cutoff = opts.maxAgeHours > 0 ? t0 - (int64_t)opts.maxAgeHours * 3600LL * 1000LL : 0;
 
@@ -652,6 +729,9 @@ ScanResult scanAll(const ScanOptions& opts) {
   }
   if (opts.includeCodex) {
     collectCodex(res.codexRoot, cutoff, rows, &res.codexFound);
+  }
+  if (opts.includeKimi) {
+    collectKimi(res.kimiRoot, cutoff, rows, &res.kimiFound);
   }
   res.totalSessions = static_cast<int>(rows.size());
 

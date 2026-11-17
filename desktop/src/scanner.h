@@ -32,6 +32,7 @@ struct ScanOptions {
   bool includeCodebuddy = true;
   bool includeClaude = true;
   bool includeCodex = true;
+  bool includeKimi = true;
   std::vector<std::string> exclude;  // 子串匹配，命中就跳过（大小写不敏感）
 };
 
@@ -42,9 +43,11 @@ struct ScanResult {
   std::string codebuddyRoot;
   std::string claudeRoot;
   std::string codexRoot;
+  std::string kimiRoot;
   bool codebuddyFound = false;
   bool claudeFound = false;
   bool codexFound = false;
+  bool kimiFound = false;
 };
 
 ScanResult scanAll(const ScanOptions& opts);

@@ -567,6 +567,7 @@ html[data-skin="win98"] .tool-chip i { width: 5px; height: 5px; }
 html[data-skin="win98"] .tool-chip.cb { color: #000080; }
 html[data-skin="win98"] .tool-chip.cl { color: #800000; }
 html[data-skin="win98"] .tool-chip.cx { color: #006000; }
+html[data-skin="win98"] .tool-chip.km { color: #400080; }
 html[data-skin="win98"] .ws-card.sel .tool-chip,
 html[data-skin="win98"] .ws-card.sel .tool-chip.cb,
 html[data-skin="win98"] .ws-card.sel .tool-chip.cl { color: #000; }
@@ -672,6 +673,7 @@ html[data-skin="win98"] .tool-dot {
 html[data-skin="win98"] .tool-dot.cb { background: #000080; }
 html[data-skin="win98"] .tool-dot.cl { background: #800000; }
 html[data-skin="win98"] .tool-dot.cx { background: #006000; }
+html[data-skin="win98"] .tool-dot.km { background: #400080; }
 html[data-skin="win98"] .sess-row:hover .tool-dot.cb,
 html[data-skin="win98"] .sess-row:hover .tool-dot.cl { background: #ffffff; }
 

@@ -785,6 +785,7 @@ html, body {
 .tool-chip.cb { color: #3fdcff; }
 .tool-chip.cl { color: #ff6fb3; }
 .tool-chip.cx { color: #8cff3f; }
+.tool-chip.km { color: #6f8cff; }
 
 .dot-sep { color: rgba(255, 255, 255, .16); }
 .ws-when { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -894,6 +895,7 @@ html, body {
 .tool-dot.cb { background: #3fdcff; box-shadow: 0 0 7px #3fdcff; }
 .tool-dot.cl { background: #ff6fb3; box-shadow: 0 0 7px #ff6fb3; }
 .tool-dot.cx { background: #8cff3f; box-shadow: 0 0 7px #8cff3f; }
+.tool-dot.km { background: #6f8cff; box-shadow: 0 0 7px #6f8cff; }
 
 .sess-title {
   flex: 1;
@@ -1011,6 +1013,14 @@ html, body {
   display: inline-flex;
   white-space: nowrap;
   opacity: .9;
+}
+
+/* 页面不可见（收进托盘/最小化）时停掉纯装饰的动画，省合成开销 */
+body.page-idle .crt-roll,
+body.page-idle .lamp.act,
+body.page-idle .skeleton,
+body.page-idle .brief-dot {
+  animation: none !important;
 }
 
 /* ---------------- 复盘（本地模型） ---------------- */

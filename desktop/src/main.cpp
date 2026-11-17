@@ -2,11 +2,14 @@
 #include "common.h"
 
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <wrl.h>
 
 #include <cctype>
 #include <cstdio>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 #include "WebView2.h"
 #include "autostart.h"
@@ -162,13 +165,96 @@ std::string actionScript(const std::string& act) {
 }
 
 // 把窗口拉出来 / 收起来（热键和托盘菜单共用）。拉起时顺手把光标放进搜索框。
+// WebView2 是 6 个独立进程（浏览器/渲染/GPU/网络/存储/crashpad），
+// EmptyWorkingSet 只管得到自己，要逐个把子进程树的工作集也还回去。
+// 挂起之后再调，页面不会重绘；恢复时缺的页按需读回来。
+void trimChildProcesses() {
+  const DWORD me = GetCurrentProcessId();
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return;
+
+  std::vector<std::pair<DWORD, DWORD>> all;  // pid, ppid
+  PROCESSENTRY32W e{};
+  e.dwSize = sizeof(e);
+  if (Process32FirstW(snap, &e)) {
+    do {
+      all.emplace_back(e.th32ProcessID, e.th32ParentProcessID);
+    } while (Process32NextW(snap, &e));
+  }
+  CloseHandle(snap);
+
+  // 从自己出发把整棵子树找出来（msedgewebview2 自己还会再生一层）
+  std::unordered_set<DWORD> mine;
+  mine.insert(me);
+  for (bool grew = true; grew;) {
+    grew = false;
+    for (const auto& k : all) {
+      if (mine.count(k.second) && !mine.count(k.first)) {
+        mine.insert(k.first);
+        grew = true;
+      }
+    }
+  }
+
+  int n = 0;
+  for (const auto& k : all) {
+    if (k.first == me || !mine.count(k.first)) continue;
+    HANDLE h = OpenProcess(PROCESS_SET_QUOTA, FALSE, k.first);
+    if (!h) continue;
+    SetProcessWorkingSetSize(h, (SIZE_T)-1, (SIZE_T)-1);
+    CloseHandle(h);
+    ++n;
+  }
+  crg::logf("trimmed child processes=" + std::to_string(n));
+}
+
+// 藏起来以后继续跑是不划算的：CRT 光带一直在动、时钟每秒一跳、渲染进程还占着显存。
+// 常驻托盘一整晚，这些空转会在弱显卡上拖累桌面合成器 —— 表现就是应用先白、桌面跟着白。
+// 所以窗口不可见时把 WebView 挂起并把内存目标降到 LOW，重新显示时再恢复。
+void suspendWebView(bool suspend) {
+  if (!g_app.webview) return;
+  crg::logf(std::string("webview suspend=") + (suspend ? "1" : "0"));
+  // IsVisible 在 controller 上，不在 webview 上
+  if (g_app.controller) g_app.controller->put_IsVisible(suspend ? FALSE : TRUE);
+
+  Microsoft::WRL::ComPtr<ICoreWebView2_3> wv3;
+  if (SUCCEEDED(g_app.webview->QueryInterface(IID_PPV_ARGS(&wv3))) && wv3) {
+    if (suspend) {
+      wv3->TrySuspend(
+          Callback<ICoreWebView2TrySuspendCompletedHandler>(
+              [](HRESULT hr, BOOL ok) -> HRESULT {
+                crg::logf("TrySuspend hr=" + std::to_string(hr) + " suspended=" + (ok ? "1" : "0"));
+                // 挂起成功之后再回收，免得跟正在跑的渲染抢页
+                if (ok) trimChildProcesses();
+                return S_OK;
+              })
+              .Get());
+    } else {
+      wv3->Resume();
+    }
+  }
+  Microsoft::WRL::ComPtr<ICoreWebView2_19> wv19;
+  if (SUCCEEDED(g_app.webview->QueryInterface(IID_PPV_ARGS(&wv19))) && wv19) {
+    wv19->put_MemoryUsageTargetLevel(
+        suspend ? COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+                : COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL);
+  }
+  // 挂起后把工作集还给系统：收进托盘的工具不该占着几百 MB 不放。
+  // 再点开时缺的页会按需重新读回来，代价只是第一次重绘慢一点
+  if (suspend) {
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+  }
+}
+
 void toggleWindow(HWND hwnd) {
   const bool focused = IsWindowVisible(hwnd) && !IsIconic(hwnd) && GetForegroundWindow() == hwnd;
   if (focused) {
     ShowWindow(hwnd, SW_HIDE);
+    suspendWebView(true);
     return;
   }
   ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+  suspendWebView(false);
   SetForegroundWindow(hwnd);
   if (g_app.webview) {
     g_app.webview->ExecuteScript(
@@ -222,6 +308,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
     case WM_SIZE:
       resizeWebView(hwnd);
+      // 最小化 = 看不见 = 没必要继续画，顺手把渲染进程挂起
+      if (g_app.webview && !g_app.shotMode) suspendWebView(wp == SIZE_MINIMIZED);
       return 0;
     case WM_APP_CAPTURE: {
       crg::logf("WM_APP_CAPTURE shot=" + g_app.shotPath);
@@ -266,6 +354,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_TRAY:
       if (lp == WM_LBUTTONDBLCLK) {
         ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+        suspendWebView(false);
         SetForegroundWindow(hwnd);
       } else if (lp == WM_RBUTTONUP) {
         showTrayMenu(hwnd);
@@ -294,6 +383,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
       }
       ShowWindow(hwnd, SW_HIDE);
+      suspendWebView(true);
       if (!g_app.hidHintShown && g_app.trayAdded) {
         g_app.hidHintShown = true;
         NOTIFYICONDATAW nid{};
@@ -529,6 +619,43 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                         ICoreWebView2* webview = nullptr;
                         controller->get_CoreWebView2(&webview);
                         if (webview) {
+                          // 正常模式也要留住这个指针：热键往里注入聚焦脚本、隐藏时挂起、
+                          // 崩溃后重载，都要用它。之前只在 --shot 分支里赋值，
+                          // 结果这些功能在真实使用中其实一直是空转
+                          g_app.webview = webview;
+                          g_app.webview->AddRef();
+                          crg::logf("webview ready (normal mode pointer set)");
+
+                          // 渲染进程挂掉的直接表现就是一屏白，而且不会自己恢复。
+                          // 接管这个事件：记日志 + 重载页面，带冷却避免崩溃-重载死循环。
+                          // 浏览器进程退出是另一种情况（整个 WebView 没了），重载没有意义
+                          EventRegistrationToken failTok{};
+                          webview->add_ProcessFailed(
+                              Callback<ICoreWebView2ProcessFailedEventHandler>(
+                                  [](ICoreWebView2*,
+                                     ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
+                                    COREWEBVIEW2_PROCESS_FAILED_KIND kind{};
+                                    args->get_ProcessFailedKind(&kind);
+                                    crg::logf("webview process failed kind=" +
+                                              std::to_string((int)kind));
+                                    if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED)
+                                      return S_OK;
+                                    static ULONGLONG lastReload = 0;
+                                    const ULONGLONG now = GetTickCount64();
+                                    if (now - lastReload < 15000) {
+                                      crg::logf("webview reload suppressed (cooldown)");
+                                      return S_OK;
+                                    }
+                                    lastReload = now;
+                                    if (g_app.webview) {
+                                      crg::logf("webview reloading after process failure");
+                                      g_app.webview->Reload();
+                                    }
+                                    return S_OK;
+                                  })
+                                  .Get(),
+                              &failTok);
+
                           ICoreWebView2Settings* settings = nullptr;
                           webview->get_Settings(&settings);
                           if (settings) {
@@ -546,8 +673,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                             if (!w.empty()) waitMs = atoi(w.c_str());
                           }
                           if (!shotPath.empty()) {
-                            g_app.webview = webview;
-                            g_app.webview->AddRef();
                             g_app.shotPath = shotPath;
                             g_app.autoUi = getArgValue("--ui", "");
                             EventRegistrationToken tok{};

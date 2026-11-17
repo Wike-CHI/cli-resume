@@ -296,7 +296,7 @@ void SearchIndex::writeIndexFile(const Doc& doc) const {
                      {"o", b.out}, {"cr", b.cacheRead}, {"cw", b.cacheWrite},
                      {"n", b.calls}});
   }
-  f << dumpJson(json{{"v", 4},
+  f << dumpJson(json{{"v", 5},
                      {"tool", doc.tool},
                      {"sid", doc.sessionId},
                      {"cwd", doc.cwd},
@@ -317,7 +317,35 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
   doc.mtime = src.mtime;
   doc.size = src.size;
 
+  // kimi 的正文在 agents/main/wire.jsonl，但 cwd 和标题只写在同级的 state.json 里。
+  // 反向推两段目录即可，不用让上游把上下文一起传进来
+  if (src.tool == "kimi") {
+    std::wstring dir = src.path;
+    for (int i = 0; i < 3; ++i) {  // wire.jsonl → main → agents → 会话目录
+      const size_t at = dir.find_last_of(L"\\/");
+      if (at == std::string::npos) break;
+      dir.erase(at);
+    }
+    std::ifstream sf(dir + L"\\state.json", std::ios::binary);
+    if (sf) {
+      std::stringstream ss;
+      ss << sf.rdbuf();
+      try {
+        json st = json::parse(ss.str());
+        doc.cwd = jstr(st, "cwd");
+        std::string t = jstr(st, "title");
+        if (t.empty()) t = jstr(st, "lastPrompt");
+        // kimi 的标题可能是「提示词 + K Kimi Thinking + 推理」拼的，切在标记处
+        const size_t mark = t.find(" Kimi Thinking");
+        if (mark != std::string::npos && mark > 0) t.resize(mark);
+        if (!t.empty()) doc.title = utf8Truncate(flatten(t), 120);
+      } catch (...) {
+      }
+    }
+  }
+
   std::string firstUser;
+  bool subagent = false;  // codex 的子线程，整份丢弃
   size_t bytes = 0;
   int lineNo = 0;
   std::unordered_set<std::string> seenUsage;  // claude 同一条消息会被写多行，只算一次
@@ -406,6 +434,24 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
       return;
     }
 
+    // kimi 的用量是独立事件，字段名自成一套：inputOther / inputCacheRead / inputCacheCreation
+    if (type == "usage.record") {
+      json usage = jval(j, "usage");
+      if (usage.is_object() && !usage.empty()) {
+        const std::string day = dayOf(jval(j, "time"));  // kimi 用 time，不是 timestamp
+        if (!day.empty()) {
+          const std::string model = jstr(j, "model");
+          UsageBucket* b = bucketFor(doc.usage, day, model.empty() ? "kimi" : model);
+          b->in += numOf(usage, "inputOther");
+          b->cacheRead += numOf(usage, "inputCacheRead");
+          b->cacheWrite += numOf(usage, "inputCacheCreation");
+          b->out += numOf(usage, "output");
+          b->calls += 1;
+        }
+      }
+      return;
+    }
+
     std::string role;
     json content;
     if (type == "message") {
@@ -416,9 +462,12 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
       json msg = jval(j, "message");
       content = msg.is_object() ? jval(msg, "content") : jval(j, "content");
     } else if (type == "session_meta") {
-      // codex：cwd 只在这里出现
+      // codex：cwd 只在这里出现，subagent 标记也只在这里
       json p = jval(j, "payload");
       if (doc.cwd.empty()) doc.cwd = jstr(p, "cwd");
+      json src = jval(p, "source");
+      if (src.is_object() && src.contains("subagent")) subagent = true;
+      if (jstr(p, "thread_source").rfind("guardian", 0) == 0) subagent = true;
       return;
     } else if (type == "response_item") {
       json p = jval(j, "payload");
@@ -437,6 +486,27 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
         role = "tool";
       } else {
         return;  // reasoning / encrypted 之类不进索引
+      }
+    } else if (type == "agent.message.appended") {
+      // kimi：外层 message 是信封，message.message 才是真正的消息
+      json m = jval(jval(j, "message"), "message");
+      if (!m.is_object()) return;
+      role = jstr(m, "role");  // user / assistant / tool
+      content = jval(m, "content");
+      // 工具调用不在 content 里，单独一枚 toolCalls；拼成一行让命令本身也能搜到
+      json tc = jval(m, "toolCalls");
+      if (tc.is_array() && !tc.empty()) {
+        std::string line;
+        for (const auto& c : tc) {
+          const std::string nm = jstr(c, "name");
+          const std::string args = jstr(c, "arguments");
+          if (nm.empty()) continue;
+          line += (line.empty() ? "" : "\n") + ("工具 " + nm + " " + args);
+        }
+        if (!line.empty()) {
+          if (!content.is_array()) content = json::array();
+          content.push_back({{"type", "text"}, {"text", line}});
+        }
       }
     } else if (type == "summary") {
       // 老会话的摘要就是首条用户消息，拿来当兜底标题
@@ -482,6 +552,9 @@ void SearchIndex::parseSource(const Src& src, Doc& doc) {
   }
   if (doc.title.empty() && !firstUser.empty()) doc.title = utf8Truncate(firstUser, 48);
   if (doc.ts == 0) doc.ts = doc.mtime;
+  // codex 的 guardian 审查线程也是独立 rollout，正文全是「Guardian review」，
+  // 进索引只会把真实命中淹掉（实测 96 条命中里 80 条是它）
+  if (subagent) doc.entries.clear();
 }
 
 // 上一个版本留下的索引，先读回内存，这样重建期间也能搜（结果可能略旧）
@@ -509,7 +582,7 @@ void SearchIndex::loadIndexFiles() {
       if (first) {
         first = false;
         // 老版本索引没有 usage，直接不认，让下面的全量扫描重建一份
-        if (j.value("v", 0) != 4) {
+        if (j.value("v", 0) != 5) {
           oldVersion = true;
           break;
         }
@@ -616,6 +689,23 @@ void SearchIndex::run() {
         for (const auto& f : listDirW(projPath)) {
           if (f.size() < 7 || f.compare(f.size() - 6, 6, L".jsonl") != 0) continue;
           addFile(projPath + L"\\" + f, f, root.tool);
+        }
+      }
+    }
+  }
+  // kimi：sessions/<工作区>/session_<uuid>/agents/main/wire.jsonl。
+  // 会话 id 就是目录名（kimi -S 认这个），文件名 wire.jsonl 本身没有信息；
+  // 子 agent（agents/agent-3 之类）不进索引，否则一个任务能搜出好几份
+  if (!stopFlag_) {
+    const std::wstring kbase = utf8ToWide(homeDir() + "\\.kimi-code\\sessions");
+    if (isDirW(kbase)) {
+      for (const auto& wd : listDirW(kbase)) {
+        const std::wstring wdp = kbase + L"\\" + wd;
+        if (!isDirW(wdp)) continue;
+        for (const auto& sess : listDirW(wdp)) {
+          if (sess.rfind(L"session_", 0) != 0) continue;
+          // 借文件名把会话名递进去：sidFromFile 去掉 .jsonl 就是 session_<uuid>
+          addFile(wdp + L"\\" + sess + L"\\agents\\main\\wire.jsonl", sess + L".jsonl", "kimi");
         }
       }
     }
