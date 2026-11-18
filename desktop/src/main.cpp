@@ -37,6 +37,7 @@ struct AppState {
   bool trayAdded = false;
   bool shotMode = false;
   bool hidHintShown = false;
+  double zoom = 1.0;        // --zoom：出图/录屏时放大界面，文字够清楚
   UINT taskbarMsg = 0;
 };
 
@@ -562,6 +563,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   // 不带就用默认尺寸
   int kWinW = 1180, kWinH = 820;
   {
+    const std::string z = getArgValue("--zoom", "");
+    if (!z.empty()) {
+      const double v = atof(z.c_str());
+      if (v >= 0.75 && v <= 2.5) g_app.zoom = v;
+    }
+  }
+  {
     const std::string sz = getArgValue("--size", "");
     const size_t x = sz.find('x');
     if (x != std::string::npos) {
@@ -651,6 +659,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
                         }
                         g_app.controller = controller;
                         controller->AddRef();
+                        // 出图时放大界面：窗口像素就那么多，把 UI 放大渲染才看得清
+                        if (g_app.zoom != 1.0) controller->put_ZoomFactor(g_app.zoom);
                         resizeWebView(hwnd);
                         ICoreWebView2* webview = nullptr;
                         controller->get_CoreWebView2(&webview);
