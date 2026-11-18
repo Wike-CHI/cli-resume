@@ -61,6 +61,7 @@ class TermSession : public std::enable_shared_from_this<TermSession> {
   std::atomic<bool> stopping_{false};
 
   std::mutex writeMu_;
+  std::mutex resizeMu_;
 };
 
 class TermManager {

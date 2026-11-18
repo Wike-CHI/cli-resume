@@ -197,8 +197,10 @@ void TermSession::push(const char* p, size_t n) {
     std::lock_guard<std::mutex> lk(mu_);
     pending_.append(p, n);
     if (pending_.size() > kPendingMax) {
-      // 只留尾部，前面的历史在 xterm 里也早已滚出视口
-      pending_.erase(0, pending_.size() - kPendingMax);
+      // 不能从中间截断：半个 ANSI 序列会让 xterm 的解析器停在「等后续字节」的状态，
+      // 之后所有输出都被当成那个序列的一部分吞掉——表现就是终端彻底不动了。
+      // 整段丢弃 + 显式重置，宁可少一段历史，也不要让画面死住
+      pending_.assign("\r\n\x1b[0m\x1b[90m[输出过多，前面一段已丢弃]\x1b[0m\r\n");
     }
   }
   cv_.notify_one();
@@ -227,7 +229,9 @@ void TermSession::write(const std::string& bytes) {
 }
 
 void TermSession::resize(int cols, int rows) {
-  std::lock_guard<std::mutex> lk(writeMu_);
+  // 单独一把锁：ResizePseudoConsole 偶尔会在 conhost 里卡一下，
+  // 和写输入共用一把锁的话，缩放的瞬间键盘输入就跟着停了
+  std::lock_guard<std::mutex> lk(resizeMu_);
   if (!hpc_) return;
   ResizePseudoConsole(hpc_, clampSize(cols, rows));
 }
@@ -266,15 +270,26 @@ void TermSession::stop() {
 std::shared_ptr<TermSession> TermManager::open(const std::string& cwd, const std::string& cmd,
                                               const std::string& shell, const std::string& title,
                                               int cols, int rows, std::string& err) {
+  // 布局里记的目录可能已经被删了。以前这种情况每次启动都是一扇起不来的死窗格，
+  // 看着就像「终端坏了」——退回主目录，至少还能用
+  std::string useCwd = cwd;
+  if (!useCwd.empty()) {
+    const DWORD a = GetFileAttributesW(utf8ToWide(useCwd).c_str());
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+      logf("term cwd missing, fallback to home: " + useCwd);
+      useCwd.clear();  // start() 里空 cwd 就是用户主目录
+    }
+  }
+
   auto s = std::make_shared<TermSession>();
-  if (!s->start(cwd, cmd, shell, cols, rows)) {
+  if (!s->start(useCwd, cmd, shell, cols, rows)) {
     err = "终端启动失败：ConPTY 或 shell 创建不出来";
     return nullptr;
   }
   s->title = title;
   std::lock_guard<std::mutex> lk(mu_);
   map_[s->id] = s;
-  logf("term open id=" + s->id + " cwd=" + cwd + " cmd_len=" + std::to_string(cmd.size()));
+  logf("term open id=" + s->id + " cwd=" + useCwd + " cmd_len=" + std::to_string(cmd.size()));
   return s;
 }
 

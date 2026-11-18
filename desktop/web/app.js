@@ -1932,6 +1932,38 @@ function termFit(pane) {
   }
 }
 
+// 输出分块喂给 xterm：一次 write 几 MB 会把主线程钉住整整一秒，
+// 表现就是界面完全没反应。按 32KB 一片、每片一个事件循环任务，界面始终能响应
+const TERM_CHUNK = 32 * 1024;
+
+function termQueueWrite(pane, bytes) {
+  if (pane.dead) return;
+  if (!pane.q) pane.q = [];
+  pane.q.push(bytes);
+  if (pane.qTimer) return;
+  pane.qTimer = setTimeout(() => termDrainQueue(pane), 0);
+}
+
+function termDrainQueue(pane) {
+  pane.qTimer = 0;
+  if (!pane.q || !pane.q.length || pane.dead) return;
+
+  let budget = TERM_CHUNK;
+  while (pane.q.length && budget > 0) {
+    const head = pane.q[0];
+    if (head.length <= budget) {
+      pane.term.write(head);
+      budget -= head.length;
+      pane.q.shift();
+    } else {
+      pane.term.write(head.subarray(0, budget));
+      pane.q[0] = head.subarray(budget);  // 共享底层 buffer，不复制
+      budget = 0;
+    }
+  }
+  if (pane.q.length) pane.qTimer = setTimeout(() => termDrainQueue(pane), 0);
+}
+
 function termConnect(pane) {
   const ws = new WebSocket(`ws://${location.host}/api/term/ws?id=${encodeURIComponent(pane.id)}`);
   ws.binaryType = 'arraybuffer';
@@ -1944,11 +1976,24 @@ function termConnect(pane) {
   };
   ws.onmessage = (ev) => {
     if (typeof ev.data === 'string') return;
-    pane.term.write(new Uint8Array(ev.data));
+    termQueueWrite(pane, new Uint8Array(ev.data));
+  };
+  ws.onerror = () => {
+    // 连不上也要说一声，否则窗格就是一块沉默的黑框
+    if (!pane.dead && !pane.wsDown) {
+      pane.wsDown = true;
+      try { pane.term.writeln('\r\n\x1b[90m[终端连接失败，检查是否有别的实例占着端口]\x1b[0m'); } catch (e) {}
+    }
   };
   ws.onclose = () => {
     pane.ws = null;
     pane.el.classList.add('dead');
+    pane.q = [];
+    if (pane.qTimer) clearTimeout(pane.qTimer);
+    // 断线不能只靠边框变色：画面还停着上一帧，看着就是「卡死」
+    if (!pane.dead) {
+      try { pane.term.writeln('\r\n\x1b[90m[连接已断开，右上角 × 关掉重开]\x1b[0m'); } catch (e) {}
+    }
     termRenderTabs();
   };
 }
@@ -1989,9 +2034,12 @@ async function termAddPane(opt = {}) {
     termClosePane(pane);
   });
   el.addEventListener('mousedown', () => {
-    if (TM.active === pane) return;
-    TM.active = pane;
-    termLayout();
+    if (TM.active !== pane) {
+      TM.active = pane;
+      termLayout();
+    }
+    // 点哪块就把键盘交给哪块，不然看起来像「点了没反应」
+    pane.term.focus();
   });
   term.onData((d) => {
     if (pane.ws && pane.ws.readyState === 1) pane.ws.send(new TextEncoder().encode(d));
@@ -2031,6 +2079,9 @@ async function termAddPane(opt = {}) {
     pane.id = r.id;
     el.querySelector('.term-meta').textContent = pane.cwd ? pane.cwd.split(/[\\/]/).pop() : 'shell';
     termConnect(pane);
+    // 新窗格立刻拿到键盘：不然用户对着它敲字，字符全进了旁边那扇，
+    // 这扇一直没动静，很容易被当成「卡死」
+    pane.term.focus();
   } catch (e) {
     el.classList.add('dead');
     term.writeln(`\x1b[31m${e.message}\x1b[0m`);
@@ -2045,6 +2096,10 @@ function termClosePane(pane) {
   const i = TM.panes.indexOf(pane);
   if (i < 0) return;
   TM.panes.splice(i, 1);
+  // 先停掉写入队列，否则关掉之后 rAF/setTimeout 还在往已 dispose 的终端里写
+  pane.dead = true;
+  pane.q = [];
+  if (pane.qTimer) clearTimeout(pane.qTimer);
   if (pane.ro) pane.ro.disconnect();
   if (pane.ws) {
     try { pane.ws.close(); } catch (e) { /* 已经关过了 */ }
