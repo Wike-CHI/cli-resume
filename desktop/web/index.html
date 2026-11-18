@@ -16,7 +16,9 @@
 (function () {
   try {
     var t = localStorage.getItem('cli-resume-theme');
-    if (t === 'win98' || t === 'neon') document.documentElement.dataset.skin = t;
+    if (t && ['neon', 'amber', 'win98', 'xp'].indexOf(t) >= 0) {
+      document.documentElement.dataset.skin = t;
+    }
   } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
 })();
 </script>
@@ -100,6 +102,26 @@
           <button data-range="168"><span>7 天</span><em>7D</em></button>
           <button data-range="720" class="on"><span>30 天</span><em>30D</em></button>
           <button data-range="0"><span>全部</span><em>ALL</em></button>
+        </div>
+      </section>
+
+      <section class="rail-sec">
+        <h3>WORKSPACE</h3>
+        <button id="ws-add" class="primary small block">＋ 新建工作空间</button>
+
+        <div id="ws-form" hidden>
+          <div class="field">
+            <label>目录</label>
+            <input id="ws-path" type="text" spellcheck="false" placeholder="D:\work\new-project">
+          </div>
+          <div class="ws-form-row">
+            <button id="ws-browse" class="mini-btn">浏览…</button>
+            <label class="chip-opt"><input type="checkbox" id="ws-create"><span>不存在就建</span></label>
+          </div>
+          <div class="ws-form-actions">
+            <button id="ws-ok" class="primary small">添加</button>
+            <button id="ws-cancel" class="mini-btn">取消</button>
+          </div>
         </div>
       </section>
 
@@ -233,6 +255,7 @@
   <div class="crt-roll" aria-hidden="true"></div>
 </div>
 
+<div id="cli-menu" class="cli-menu" hidden></div>
 <div id="toast" class="toast"></div>
 
 <script src="vendor/xterm.js"></script>

@@ -134,6 +134,16 @@ std::string actionScript(const std::string& act) {
     // 勾上「只看收藏」：验证收藏过滤与置顶顺序
     return "var c=document.getElementById('opt-fav');if(c){c.checked=true;c.dispatchEvent(new Event('change'));}";
   }
+  if (act == "newmenu") {
+    // 打开「新会话」的 CLI 菜单：验证浮层定位与四套皮肤的样式
+    return "var b=document.querySelector('[data-newsess]');if(b)b.click();";
+  }
+  if (act == "wsform") {
+    // 展开左栏「新建工作空间」表单。截图时先把终端面板收起来，
+    // 否则左栏高度不够，表单会被挤到可视区外
+    return "var d=document.getElementById('termdock');if(d)d.hidden=true;"
+           "var f=document.getElementById('ws-form');if(f){f.hidden=false;f.scrollIntoView({block:'center'});}";
+  }
   if (act == "stats") {
     // 打开 token 统计视图：验证汇总数字与图表的渲染
     return "document.getElementById('stats-btn').click();";

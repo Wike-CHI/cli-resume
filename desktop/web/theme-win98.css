@@ -1107,3 +1107,39 @@ html[data-skin="win98"] .batch-btn {
 }
 html[data-skin="win98"] .batch-btn:hover { background: #c0c0c0; box-shadow: var(--raise); }
 html[data-skin="win98"] .batch-btn:active { box-shadow: var(--sunken); }
+
+/* 新会话菜单与工作空间表单：98 里就是一块凸起的灰面板 */
+html[data-skin="win98"] .cli-menu {
+  border: 0;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  padding: 3px;
+}
+html[data-skin="win98"] .cli-menu button {
+  font-family: var(--ui);
+  font-size: 12px;
+  color: #000000;
+  padding: 3px 8px;
+}
+html[data-skin="win98"] .cli-menu button:hover { background: #000080; color: #ffffff; }
+html[data-skin="win98"] .cli-menu button.on { font-weight: 700; }
+html[data-skin="win98"] .cli-menu button.on::after { content: ""; }
+html[data-skin="win98"] .cli-menu-hint {
+  border-top: 1px solid #808080;
+  color: #404040;
+  font-family: var(--ui);
+  letter-spacing: 0;
+  font-size: 10px;
+}
+html[data-skin="win98"] .mini-btn.new { color: #006000; }
+html[data-skin="win98"] .mini-btn.del { color: #404040; }
+
+html[data-skin="win98"] .ws-new {
+  border: 0;
+  background: #ffffff;
+  box-shadow: var(--sunken);
+  color: #000080;
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0;
+}

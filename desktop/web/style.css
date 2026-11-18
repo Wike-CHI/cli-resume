@@ -498,6 +498,60 @@ html, body {
 }
 .rail-foot b { color: var(--cyan); font-weight: 400; }
 
+/* ---------------- 新建工作空间 / 新会话菜单 ---------------- */
+.primary.small.block { width: 100%; margin-bottom: 8px; }
+
+#ws-form { display: flex; flex-direction: column; gap: 7px; }
+#ws-form[hidden] { display: none; }
+.ws-form-row { display: flex; align-items: center; gap: 8px; }
+.ws-form-row .mini-btn { width: auto; height: 22px; padding: 0 8px; }
+.ws-form-actions { display: flex; gap: 6px; }
+.ws-form-actions .mini-btn { width: auto; height: 22px; padding: 0 10px; }
+.ws-form-actions .primary { flex: 1 1 auto; }
+
+.cli-menu {
+  position: fixed;
+  z-index: 95;
+  min-width: 132px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid rgba(var(--cyan-rgb), .45);
+  background: rgba(10, 5, 22, .97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+}
+.cli-menu[hidden] { display: none; }
+.cli-menu button {
+  padding: 5px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.cli-menu button:hover { background: rgba(var(--cyan-rgb), .14); color: var(--cyan); }
+.cli-menu button.on { color: var(--cyan); }
+.cli-menu button.on::after { content: " · 常用"; color: var(--faint); font-size: 9px; }
+.cli-menu-hint {
+  margin-top: 3px;
+  padding: 4px 9px 2px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .04em;
+}
+
+.mini-btn.new { color: var(--lime); border-color: rgba(var(--lime-rgb), .42); }
+.mini-btn.new:hover { background: rgba(var(--lime-rgb), .12); border-color: var(--lime); color: var(--lime); }
+.mini-btn.del { color: var(--muted); }
+.mini-btn.del:hover { color: var(--magenta); border-color: rgba(var(--mag-rgb), .5); }
+
+.empty .primary.small { margin-top: 12px; }
+
 /* 工作区窗口的标记：告诉用户「这扇窗只看一个目录」 */
 .only-chip {
   display: inline-flex;
@@ -791,8 +845,22 @@ html, body {
 .ws-when { color: var(--muted); font-variant-numeric: tabular-nums; }
 .ws-count { color: var(--faint); }
 
+.ws-new {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 1px solid rgba(var(--lime-rgb), .5);
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: .08em;
+}
+
+/* 副标题里这些短字段不能被「最近…」挤到换行：固定不缩，只让最后那段省略号收尾 */
+.ws-count, .ws-when, .ws-fav, .ws-sub .dot-sep { flex: 0 0 auto; white-space: nowrap; }
+
 .ws-latest {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   color: var(--faint);
   white-space: nowrap;

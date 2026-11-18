@@ -314,24 +314,31 @@ function itemHtml(w, index) {
       <div class="ws-main">
         <div class="ws-title-row">
           <span class="ws-name">${esc(w.name)}</span>
+          ${w.added ? '<span class="ws-new" title="手动登记的工作空间">新</span>' : ''}
           <span class="ws-path" title="${esc(w.cwd)}"><bdi>${esc(w.cwd)}</bdi></span>
         </div>
         <div class="ws-sub">
           ${chips}
           <span class="dot-sep">·</span>
           ${favCount ? `<span class="ws-fav" title="已收藏 ${favCount} 个会话">★ ${favCount}</span><span class="dot-sep">·</span>` : ''}
-          <span class="ws-count">${w.sessionCount || sessions.length} 个对话</span>
-          <span class="dot-sep">·</span>
-          <span class="ws-when">${esc(relTime(w.lastActive))}</span>
+          ${w.added
+            ? `<span class="ws-count">还没开始</span><span class="dot-sep">·</span><span class="ws-when">手动登记</span>`
+            : `<span class="ws-count">${w.sessionCount || sessions.length} 个对话</span>
+               <span class="dot-sep">·</span>
+               <span class="ws-when">${esc(relTime(w.lastActive))}</span>`}
           ${latest ? `<span class="ws-latest">最近「${esc(latest.title || '无标题')}」</span>` : ''}
         </div>
       </div>
       <div class="ws-side">
-        <button class="mini-btn brief" data-brief="${esc(w.cwd)}" title="让本地模型复盘这个目录最近一次会话">复盘</button>
+        <button class="mini-btn new${w.added ? ' go' : ''}" data-newsess="${esc(w.cwd)}"
+                title="在这个目录开一个全新的会话（不续接）">新会话</button>
+        ${w.added ? '' : `<button class="mini-btn brief" data-brief="${esc(w.cwd)}" title="让本地模型复盘这个目录最近一次会话">复盘</button>`}
         <button class="mini-btn" data-window="${esc(w.cwd)}" title="把这个目录单独开一个窗口">窗口</button>
         <button class="mini-btn" data-reveal="${esc(w.cwd)}" title="在资源管理器打开">定位</button>
-        <button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>
-        <span class="caret" title="${open ? '收起' : '展开对话列表'}"></span>
+        ${w.added
+          ? `<button class="mini-btn del" data-delws="${esc(w.cwd)}" title="只是从列表移除，不删目录">移除</button>`
+          : `<button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>`}
+        ${w.added ? '' : `<span class="caret" title="${open ? '收起' : '展开对话列表'}"></span>`}
       </div>
     </div>
     ${panel}
@@ -697,6 +704,129 @@ async function batchOpen(key) {
     (rest > 0 ? `，还有 ${rest} 个更早的没开（${embedded ? '面板上限 4 个' : '一次最多 8 个'}）` : ''));
 }
 
+// ---------------- 新会话 ----------------
+// 和「进入」不同：这里不续接任何历史，就是在该目录起一个新会话。
+// 一个目录可能同时用几家 CLI，所以先让人选；默认高亮这家最近用过的那个。
+
+const TOOL_LIST = ['claude', 'codebuddy', 'codex', 'kimi'];
+
+function lastToolFor(cwd) {
+  const ws = S.byId.get(String(cwd).toLowerCase());
+  const s = ws && (ws.sessions || [])[0];
+  return (s && s.tool) || S.settings.defaultTool || 'claude';
+}
+
+function showCliMenu(anchor, cwd) {
+  const menu = $('cli-menu');
+  const def = lastToolFor(cwd);
+  menu.innerHTML = TOOL_LIST.map((t) =>
+    `<button data-cli="${t}"${t === def ? ' class="on"' : ''}>${t}</button>`).join('') +
+    `<div class="cli-menu-hint">新会话 · ${esc(baseOf(cwd))}</div>`;
+  menu.dataset.cwd = cwd;
+  menu.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth || 132;
+  const h = menu.offsetHeight || 120;
+  menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+  menu.style.top = Math.min(window.innerHeight - h - 8, r.bottom + 5) + 'px';
+}
+
+function hideCliMenu() {
+  const m = $('cli-menu');
+  if (m) m.hidden = true;
+}
+
+async function newSession(cwd, tool) {
+  if (!cwd) return;
+  const t = TOOL_LIST.indexOf(tool) >= 0 ? tool : lastToolFor(cwd);
+  if (DEMO) {
+    toast(`示例模式：这里会开一个 ${t} 新会话`);
+    return;
+  }
+
+  if (S.settings.termMode === 'external') {
+    try {
+      const r = await fetch('/api/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ cwd, tool: t, sessionId: '', title: '新会话' }],
+          // 新会话不能用 -c：那是「续接最近一个」，正好和这里相反
+          useContinue: false,
+          window: Number(S.settings.window) || 0,
+        }),
+      }).then((x) => x.json());
+      if (r.ok) toast(`已在 Windows Terminal 打开 ${t}`);
+      else toast(r.error || '打开失败', true);
+    } catch (e) {
+      toast('打开失败：' + e.message, true);
+    }
+    return;
+  }
+
+  // ephemeral：还没说过话的窗格不写进布局，免得重启时又拉起一堆空会话
+  const pane = await termAddPane({
+    cwd, cmd: t, title: `${t} · 新会话`, tool: t, sessionId: '', ephemeral: true,
+  });
+  if (pane) toast(`已在 ${baseOf(cwd)} 开一个 ${t} 新会话`);
+}
+
+// ---------------- 新建工作空间 ----------------
+// 扫描只能发现「有过会话的目录」；全新的仓库得手动登记，才不会连入口都没有。
+
+async function addWorkspace() {
+  const cwd = $('ws-path').value.trim();
+  if (!cwd) {
+    toast('先填一个目录', true);
+    return;
+  }
+  if (DEMO) {
+    toast('示例模式不会真的添加');
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd, create: $('ws-create').checked }),
+    }).then((x) => x.json());
+    if (!r.ok) {
+      toast(r.error || '添加失败', true);
+      return;
+    }
+
+    $('ws-form').hidden = true;
+    $('ws-path').value = '';
+    $('ws-create').checked = false;
+    toast(r.duplicate ? '这个工作空间已经在了' : `已添加 ${r.name}`);
+    await load(true);
+    if (r.cwd) S.expanded.add(r.cwd.toLowerCase());
+    render();
+  } catch (e) {
+    toast('添加失败：' + e.message, true);
+  }
+}
+
+async function removeWorkspace(cwd) {
+  if (DEMO) {
+    toast('示例模式不改动');
+    return;
+  }
+  try {
+    const r = await fetch('/api/workspaces?cwd=' + encodeURIComponent(cwd), { method: 'DELETE' })
+      .then((x) => x.json());
+    if (!r.ok) {
+      toast('移除失败', true);
+      return;
+    }
+    toast('已从列表移除（目录没动）');
+    await load(true);
+  } catch (e) {
+    toast('移除失败：' + e.message, true);
+  }
+}
+
 // ---------------- 工作区窗口 ----------------
 // 一个目录一扇窗：--only 把窗口锁在这个目录，卡片上的「窗口」按钮开新的一扇。
 // 同一目录再次点击会找到已经开着的那扇，而不是叠出第三个。
@@ -1026,7 +1156,8 @@ function render() {
       ? `<div class="empty"><h3>这个时间范围内没有对话</h3><p>上面切到「全部」再看看，或者换个关键词。</p></div>`
       : `<div class="empty"><h3>还没找到会话历史</h3>
          <p>先在一个项目目录里跑一次 <code>codebuddy</code> 或 <code>claude</code>，<br>
-         再回来点右上角的刷新。</p></div>`;
+         再回来点右上角的刷新。</p>
+         <button class="primary small" data-addws>＋ 直接新建一个工作空间</button></div>`;
   } else {
     listEl.innerHTML = list.map((w, i) => itemHtml(w, i)).join('');
   }
@@ -1158,6 +1289,30 @@ listEl.addEventListener('click', (e) => {
       sessionId: row.dataset.sid,
       title: row.dataset.title,
     }], 1);
+    return;
+  }
+
+  // 新会话：先选 CLI，再在该目录起一个不带 --resume 的会话
+  const newBtn = e.target.closest('[data-newsess]');
+  if (newBtn) {
+    e.stopPropagation();
+    showCliMenu(newBtn, newBtn.dataset.newsess);
+    return;
+  }
+
+  // 空白列表里的「新建工作空间」直接展开左栏表单
+  if (e.target.closest('[data-addws]')) {
+    e.preventDefault();
+    $('ws-form').hidden = false;
+    $('ws-add').scrollIntoView({ block: 'center' });
+    $('ws-path').focus();
+    return;
+  }
+
+  const delBtn = e.target.closest('[data-delws]');
+  if (delBtn) {
+    e.stopPropagation();
+    removeWorkspace(delBtn.dataset.delws);
     return;
   }
 
@@ -1605,11 +1760,13 @@ let layoutTimer = null;
 
 function termSnapshot() {
   const dock = $('termdock');
+  // 新开的空会话（ephemeral）不落盘：重启后再拉起一堆没说过话的窗格没有意义
+  const keep = TM.panes.filter((p) => !p.ephemeral);
   return {
     visible: !dock.hidden && !dock.classList.contains('collapsed'),
     height: Math.round(dock.getBoundingClientRect().height) || 0,
-    active: Math.max(0, TM.panes.indexOf(TM.active)),
-    panes: TM.panes.map((p) => ({
+    active: Math.max(0, keep.indexOf(TM.active)),
+    panes: keep.map((p) => ({
       cwd: p.cwd || '',
       cmd: p.cmd || '',
       title: p.title || '',
@@ -1768,6 +1925,7 @@ async function termAddPane(opt = {}) {
     id: '', term, fit, el, ws: null,
     title: opt.title || 'terminal', cwd: opt.cwd || '', cmd: opt.cmd || '',
     tool: opt.tool || '', sessionId: opt.sessionId || '',
+    ephemeral: !!opt.ephemeral,
     cols: 0, rows: 0, ro: null,
   };
   TM.panes.push(pane);
@@ -1882,6 +2040,60 @@ async function termOpenItems(items) {
 
 $('stats-btn').addEventListener('click', openStats);
 
+// ---------------- 工作空间表单与 CLI 菜单 ----------------
+$('ws-add').addEventListener('click', () => {
+  const f = $('ws-form');
+  f.hidden = !f.hidden;
+  if (!f.hidden) {
+    // 左栏高度有限，终端面板开着时表单会落到可视区外
+    f.scrollIntoView({ block: 'nearest' });
+    $('ws-path').focus();
+  }
+});
+
+$('ws-cancel').addEventListener('click', () => {
+  $('ws-form').hidden = true;
+});
+
+$('ws-browse').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/pickdir').then((x) => x.json());
+    if (r.ok && r.path) {
+      $('ws-path').value = r.path;
+      $('ws-create').checked = false;  // 选到的目录一定存在，别再建
+    }
+  } catch (e) {
+    toast('打不开选择框，直接粘路径也行', true);
+  }
+});
+
+$('ws-ok').addEventListener('click', addWorkspace);
+
+// 路径框里回车 = 添加
+$('ws-path').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addWorkspace();
+  }
+});
+
+$('cli-menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cli]');
+  if (!b) return;
+  newSession($('cli-menu').dataset.cwd, b.dataset.cli);
+  hideCliMenu();
+});
+
+// 点别处、滚动、缩放都关掉菜单，别让它挂在半空
+document.addEventListener('mousedown', (e) => {
+  const m = $('cli-menu');
+  if (!m || m.hidden) return;
+  if (e.target.closest('#cli-menu') || e.target.closest('[data-newsess]')) return;
+  hideCliMenu();
+});
+window.addEventListener('resize', hideCliMenu);
+window.addEventListener('blur', hideCliMenu);
+
 $('term-btn').addEventListener('click', () => {
   if (TM.panes.length) {
     termShow();
@@ -1897,7 +2109,20 @@ $('term-split').addEventListener('click', () => {
   termAddPane({ cwd: p ? p.cwd : '', title: p ? p.title : 'shell' });
 });
 
-$('term-new').addEventListener('click', () => termAddPane({ cwd: '', title: 'shell' }));
+// 新建：优先在当前窗格的目录里开一个同款会话，没有窗格才退回空 shell
+$('term-new').addEventListener('click', () => {
+  const p = TM.active;
+  if (p && p.cwd) {
+    newSession(p.cwd, p.tool);
+    return;
+  }
+  const sel = [...S.sel][0];
+  if (sel && S.byId.get(sel)) {
+    newSession(S.byId.get(sel).cwd, '');
+    return;
+  }
+  termAddPane({ cwd: '', title: 'shell' });
+});
 $('term-hide').addEventListener('click', termCollapse);
 
 $('term-tabs').addEventListener('click', (e) => {
@@ -1943,7 +2168,21 @@ document.addEventListener('keydown', (e) => {
     $('search').select();
     return;
   }
+  // Ctrl+N：在选中的（没有就第一个）工作区里开一个新会话
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
+    const sel = [...S.sel][0];
+    const ws = (sel && S.byId.get(sel)) || visibleList()[0];
+    if (ws) {
+      e.preventDefault();
+      newSession(ws.cwd, '');
+    }
+    return;
+  }
   if (e.key === 'Escape') {
+    if (!$('cli-menu').hidden) {
+      hideCliMenu();
+      return;
+    }
     if (S.statsView) {
       S.statsView = null;
       render();

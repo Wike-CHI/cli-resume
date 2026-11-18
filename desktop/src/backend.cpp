@@ -6,8 +6,11 @@
 #include <cstdlib>
 #include <cctype>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <thread>
+
+#include <shobjidl.h>
 
 #include "launcher.h"
 #include "scanner.h"
@@ -161,6 +164,95 @@ bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::
   CloseHandle(pi.hProcess);
   logf("spawn window slug=" + slug + " cwd=" + cwd);
   return true;
+}
+
+// ---------------- 工作空间（用户手动添加的目录） ----------------
+// 扫描只能发现「有过会话的目录」。想在一个全新的仓库里开第一场对话，
+// 就得先把目录本身登记下来 —— 存 workspaces.json，和收藏一样放 dataDir，跨窗口共享。
+
+std::string normDir(std::string p) {
+  for (auto& c : p) {
+    if (c == '/') c = '\\';
+  }
+  while (p.size() > 3 && p.back() == '\\') p.pop_back();
+  // 盘符统一大写，否则 D:\x 和 d:\x 会被当成两个工作区
+  if (p.size() >= 2 && p[1] == ':') {
+    p[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(p[0])));
+  }
+  return p;
+}
+
+std::string leafOf(const std::string& p) {
+  const size_t at = p.find_last_of("\\/");
+  return at == std::string::npos ? p : p.substr(at + 1);
+}
+
+std::string keyOfDir(const std::string& p) {
+  std::string k = normDir(p);
+  std::transform(k.begin(), k.end(), k.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return k;
+}
+
+bool dirExistsUtf8(const std::string& p) {
+  const DWORD a = GetFileAttributesW(utf8ToWide(p).c_str());
+  return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+json loadExtraWs(const std::string& path) {
+  std::ifstream f(utf8ToWide(path), std::ios::binary);
+  if (!f) return json::array();
+  std::stringstream ss;
+  ss << f.rdbuf();
+  try {
+    json j = json::parse(ss.str());
+    if (j.is_array()) return j;
+    if (j.is_object() && j.contains("items") && j["items"].is_array()) return j["items"];
+  } catch (...) {
+  }
+  return json::array();
+}
+
+bool saveExtraWs(const std::string& path, const json& arr) {
+  std::ofstream f(utf8ToWide(path + ".tmp"), std::ios::binary | std::ios::trunc);
+  if (!f) return false;
+  f << dumpJson(json{{"items", arr}});
+  f.close();
+  return MoveFileExW(utf8ToWide(path + ".tmp").c_str(), utf8ToWide(path).c_str(),
+                     MOVEFILE_REPLACE_EXISTING) != FALSE;
+}
+
+// 系统文件夹选择框。跑在自己的 STA 线程里：httplib 的工作线程不一定初始化过 COM，
+// 而且模态框会阻塞，不能占着请求线程。
+std::string pickFolder() {
+  std::string result;
+  std::thread t([&result] {
+    const HRESULT hrInit =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileOpenDialog* dlg = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&dlg)))) {
+      DWORD opts = 0;
+      dlg->GetOptions(&opts);
+      dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+      dlg->SetTitle(L"选一个目录作为工作空间");
+      if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item)) && item) {
+          PWSTR p = nullptr;
+          if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &p)) && p) {
+            result = wideToUtf8(p);
+            CoTaskMemFree(p);
+          }
+          item->Release();
+        }
+      }
+      dlg->Release();
+    }
+    if (SUCCEEDED(hrInit)) CoUninitialize();
+  });
+  t.join();
+  return result;
 }
 
 }  // namespace
@@ -322,8 +414,142 @@ void Backend::setupRoutes() {
     } catch (...) {
     }
     json out = scanCached(maxAge, force);
+
+    // 把用户手动添加、但还没有任何会话的目录并进来：
+    // 这类目录搜不到历史，却是「现在就开工」的入口，得一直留在列表里
+    const std::string wsPath = dataDir_ + "\\workspaces.json";
+    json extra = loadExtraWs(wsPath);
+    if (extra.is_array() && !extra.empty()) {
+      json& arr = out["workspaces"];
+      std::set<std::string> have;
+      for (const auto& w : arr) have.insert(keyOfDir(jstr(w, "cwd")));
+      bool addedAny = false;
+      for (const auto& e : extra) {
+        const std::string cwd = normDir(jstr(e, "cwd"));
+        if (cwd.empty() || have.count(keyOfDir(cwd))) continue;
+        if (!dirExistsUtf8(cwd)) continue;  // 目录被删了就别再挂着
+        arr.push_back({{"cwd", cwd},
+                       {"name", jstr(e, "name").empty() ? leafOf(cwd) : jstr(e, "name")},
+                       // 用登记时间当活跃时间，新加的会排到前面；扫描出来的目录
+                       // 按真实会话时间排，两者不冲突
+                       {"lastActive", jval(e, "at").is_number() ? jval(e, "at").get<int64_t>() : nowMs()},
+                       {"sessionCount", 0},
+                       {"sessions", json::array()},
+                       {"added", true}});
+        addedAny = true;
+      }
+
+      // scanAll 是按 lastActive 排好的，合并进来的在末尾。
+      // 新登记的工作空间「现在就要用」，得按同样的规则重排一次才到得了前面
+      if (addedAny) {
+        std::sort(arr.begin(), arr.end(), [](const json& a, const json& b) {
+          return a.value("lastActive", (int64_t)0) > b.value("lastActive", (int64_t)0);
+        });
+      }
+    }
+
     out["settings"] = loadSettings();
     res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // ---------------- 工作空间与目录选择 ----------------
+  // 系统文件夹选择框。返回 ok=false 表示用户取消，前端不当作错误
+  srv_.Get("/api/pickdir", [](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    const std::string p = pickFolder();
+    res.set_content(dumpJson(json{{"ok", !p.empty()}, {"path", p}}),
+                    "application/json; charset=utf-8");
+  });
+
+  srv_.Get("/api/workspaces", [this](const httplib::Request&, httplib::Response& res) {
+    json out = json::array();
+    for (const auto& e : loadExtraWs(dataDir_ + "\\workspaces.json")) {
+      const std::string cwd = normDir(jstr(e, "cwd"));
+      if (cwd.empty()) continue;
+      out.push_back({{"cwd", cwd},
+                     {"name", jstr(e, "name").empty() ? leafOf(cwd) : jstr(e, "name")},
+                     {"exists", dirExistsUtf8(cwd)}});
+    }
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(json{{"ok", true}, {"items", out}}),
+                    "application/json; charset=utf-8");
+  });
+
+  // 登记一个目录；create=true 时允许顺手把不存在的目录建出来
+  srv_.Post("/api/workspaces", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      const std::string cwd = normDir(jstr(body, "cwd"));
+      const bool create = jval(body, "create").is_boolean() && jval(body, "create").get<bool>();
+
+      bool ok = false;
+      std::string err;
+      if (cwd.empty()) {
+        err = "路径为空";
+      } else if (!dirExistsUtf8(cwd)) {
+        if (create && CreateDirectoryW(utf8ToWide(cwd).c_str(), nullptr)) {
+          ok = true;
+        } else {
+          err = create ? "创建目录失败" : "目录不存在";
+        }
+      } else {
+        ok = true;
+      }
+
+      if (ok) {
+        const std::string path = dataDir_ + "\\workspaces.json";
+        json items = loadExtraWs(path);
+        bool dup = false;
+        for (const auto& e : items) {
+          if (keyOfDir(jstr(e, "cwd")) == keyOfDir(cwd)) {
+            dup = true;
+            break;
+          }
+        }
+        if (!dup) {
+          items.push_back({{"cwd", cwd}, {"name", leafOf(cwd)}, {"at", nowMs()}});
+          if (!saveExtraWs(path, items)) {
+            ok = false;
+            err = "写入 workspaces.json 失败";
+          }
+        }
+        out["duplicate"] = dup;
+      }
+
+      out["ok"] = ok;
+      out["cwd"] = cwd;
+      out["name"] = leafOf(cwd);
+      if (!ok) out["error"] = err;
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 只移除手动登记的目录；扫描出来的工作区删不掉（它由会话文件决定）
+  srv_.Delete("/api/workspaces", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    const std::string want = keyOfDir(req.has_param("cwd") ? req.get_param_value("cwd") : "");
+    if (want.empty()) {
+      out["error"] = "缺少 cwd";
+      res.set_content(dumpJson(out), "application/json; charset=utf-8");
+      return;
+    }
+    const std::string path = dataDir_ + "\\workspaces.json";
+    json items = loadExtraWs(path);
+    json kept = json::array();
+    int removed = 0;
+    for (const auto& e : items) {
+      if (keyOfDir(jstr(e, "cwd")) == want) {
+        ++removed;
+        continue;
+      }
+      kept.push_back(e);
+    }
+    out["ok"] = removed > 0 && saveExtraWs(path, kept);
+    out["removed"] = removed;
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 

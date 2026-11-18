@@ -385,3 +385,11 @@ html[data-skin="amber"] .tool-dot.km { background: var(--faint); box-shadow: non
 html[data-skin="amber"] .tool-dot.cb { background: var(--text); box-shadow: none; }
 html[data-skin="amber"] .tool-dot.cl { background: var(--amber); box-shadow: none; }
 html[data-skin="amber"] .tool-dot.cx { background: var(--muted); box-shadow: none; }
+
+/* 单色屏：菜单只用亮度和反白区分 */
+html[data-skin="amber"] .cli-menu { background: #080500; border-color: var(--amber); }
+html[data-skin="amber"] .cli-menu button.on { color: var(--amber); }
+html[data-skin="amber"] .cli-menu button:hover { background: rgba(255, 176, 0, .18); }
+html[data-skin="amber"] .mini-btn.new { color: var(--text); border-color: var(--muted); }
+
+html[data-skin="amber"] .ws-new { border-color: var(--muted); color: var(--amber); }
