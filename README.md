@@ -7,9 +7,10 @@
 桌面端还能把会话直接开在应用自己的终端面板里（ConPTY + xterm.js），不再弹外部终端窗口；
 多个会话并排看，也能随时切回外部终端。想不起上次在哪个目录说过某件事，回车直接搜会话正文。
 
-<img src="desktop/docs/promo.gif" width="880" alt="CLI Resume 演示：四套皮肤与内嵌终端">
+<a href="desktop/docs/promo.mp4"><img src="desktop/docs/promo.gif" width="880" alt="CLI Resume 演示：四套皮肤与内嵌终端"></a>
 
-<sub>[完整 31 秒版（MP4，1080p，带中文配音）](desktop/docs/promo.mp4) · 下面是四套皮肤各自的静态图</sub>
+<sub><b>▶ 点动图看完整版</b>：31 秒 / 1080p / 带中文配音 · <a href="desktop/docs/promo.mp4">MP4 直链</a>（9.9 MB）· 下面是四套皮肤各自的静态图</sub>
+[MP4 直链](desktop/docs/promo.mp4)（9.9 MB）· 下面是四套皮肤各自的静态图</sub>
 
 <img src="desktop/docs/desktop.png" width="49%" alt="80s 霓虹皮肤">
 <img src="desktop/docs/w98-desktop.png" width="49%" alt="Windows 98 皮肤">
