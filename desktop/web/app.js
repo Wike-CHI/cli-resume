@@ -2050,15 +2050,18 @@ async function termAddPane(opt = {}) {
   termFit(pane);
 
   if (DEMO) {
-    // 示例模式不真的起 shell，写几行说明，截图和首次体验都能看懂这块是干什么的
+    // 示例模式不真的起 shell。这里按真实会话的样子铺几行，但第一行就写明「示例」，
+    // 不假装跑过命令
     const dim = '\x1b[90m';
     const rst = '\x1b[0m';
     const cy = termSkin() === 'win98' ? '\x1b[36m' : '\x1b[96m';
     const at = termSkin() === 'win98' ? '\x1b[33m' : '\x1b[95m';
+    const dir = (opt.cwd || '').split(/[\\/]/).filter(Boolean).pop() || 'project';
     term.writeln(`${dim}$${rst} ${opt.cmd || 'pwsh'}`);
-    term.writeln(`${at}⏺${rst} 示例模式：这里会是真实终端`);
-    term.writeln(`${dim}  真跑起来时，codebuddy / claude 直接在应用内执行，${rst}`);
-    term.writeln(`${dim}  点「▧」可以并排开第二个、第三个，互不干扰。${rst}`);
+    term.writeln(`${at}⏺${rst} 已恢复 ${dir} 的会话${dim}（示例）${rst}`);
+    term.writeln('');
+    term.writeln(`${dim}⏺${rst} 先看一下现在的 renderToString 调用点`);
+    term.writeln(`${dim}  ⎿  Read src/render.ts${rst}`);
     term.writeln('');
     term.writeln(`${cy}>${rst} `);
     el.querySelector('.term-meta').textContent = 'demo';

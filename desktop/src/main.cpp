@@ -99,6 +99,14 @@ std::string actionScript(const std::string& act) {
     return "var s=document.getElementById('search');s.value='ai';"
            "s.dispatchEvent(new Event('input'));";
   }
+  if (act == "demoterm") {
+    return "termAddPane({cwd:'D:/work/acme-portal',cmd:'codebuddy',title:'codebuddy · acme-portal',tool:'codebuddy'});setTimeout(function(){termAddPane({cwd:'D:/work/data-pipeline',cmd:'claude',title:'claude · data-pipeline',tool:'claude'});},600);";
+  }
+  if (act == "promosearch") {
+    // 宣传素材：示例数据里能命中的词
+    return "var s=document.getElementById('search');s.value='hydration';"
+           "s.dispatchEvent(new Event('input'));";
+  }
   if (act == "deep") {
     // 走真实的回车路径：填词 → 派发 keydown，验证搜索框的回车绑定
     return "var s=document.getElementById('search');s.value='流式';s.focus();"
@@ -550,7 +558,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
 
   // CW_USEDEFAULT 交给系统放置时，窗口大小每次会被系统再调一遍，
   // 截图就一张大一张小；自己算居中位置，尺寸才稳定
-  const int kWinW = 1180, kWinH = 820;
+  // --size 1600x1000：截图和录屏时用更大的窗口，1080p 素材不至于糊。
+  // 不带就用默认尺寸
+  int kWinW = 1180, kWinH = 820;
+  {
+    const std::string sz = getArgValue("--size", "");
+    const size_t x = sz.find('x');
+    if (x != std::string::npos) {
+      const int w = atoi(sz.c_str());
+      const int h = atoi(sz.c_str() + x + 1);
+      if (w >= 900 && w <= 3840 && h >= 600 && h <= 2160) {
+        kWinW = w;
+        kWinH = h;
+      }
+    }
+  }
   int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
   int wx = (sw - kWinW) / 2, wy = (sh - kWinH) / 2;
   if (wx < 0) wx = 0;
