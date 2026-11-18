@@ -31,3 +31,6 @@ desktop.ini
 .vscode/
 .idea/
 *.user
+
+# 宣传视频的中间产物（重新生成用 docs/promo_build.py）
+desktop/docs/.promo-shots/
