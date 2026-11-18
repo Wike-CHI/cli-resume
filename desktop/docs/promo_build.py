@@ -203,7 +203,8 @@ def build(with_audio=True):
                  f"amix=inputs={len(mixes)}:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]")
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", silent] + audio_inputs +
             ["-filter_complex", graph, "-map", "0:v", "-map", "[aout]",
-             "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", mp4])
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+             "-movflags", "+faststart", mp4])
     else:
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", silent, "-c", "copy", mp4])
 
