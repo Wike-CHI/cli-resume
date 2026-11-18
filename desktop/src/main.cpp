@@ -134,6 +134,10 @@ std::string actionScript(const std::string& act) {
     // 勾上「只看收藏」：验证收藏过滤与置顶顺序
     return "var c=document.getElementById('opt-fav');if(c){c.checked=true;c.dispatchEvent(new Event('change'));}";
   }
+  if (act == "moremenu") {
+    // 卡片「⋯」的溢出菜单
+    return "var b=document.querySelector('[data-acts]');if(b)b.click();";
+  }
   if (act == "newmenu") {
     // 打开「新会话」的 CLI 菜单：验证浮层定位与四套皮肤的样式
     return "var b=document.querySelector('[data-newsess]');if(b)b.click();";

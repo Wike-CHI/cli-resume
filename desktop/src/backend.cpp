@@ -222,6 +222,30 @@ bool saveExtraWs(const std::string& path, const json& arr) {
                      MOVEFILE_REPLACE_EXISTING) != FALSE;
 }
 
+// 「这个目录上次用的是哪家 CLI」：一个 cwd → tool 的字典。
+// 只是新会话菜单的默认高亮，丢了不影响任何功能，所以坏了就当没有
+json loadLastTool(const std::string& path) {
+  std::ifstream f(utf8ToWide(path), std::ios::binary);
+  if (!f) return json::object();
+  std::stringstream ss;
+  ss << f.rdbuf();
+  try {
+    json j = json::parse(ss.str());
+    if (j.is_object() && j.contains("items") && j["items"].is_object()) return j["items"];
+  } catch (...) {
+  }
+  return json::object();
+}
+
+bool saveLastTool(const std::string& path, const json& map) {
+  std::ofstream f(utf8ToWide(path + ".tmp"), std::ios::binary | std::ios::trunc);
+  if (!f) return false;
+  f << dumpJson(json{{"items", map}});
+  f.close();
+  return MoveFileExW(utf8ToWide(path + ".tmp").c_str(), utf8ToWide(path).c_str(),
+                     MOVEFILE_REPLACE_EXISTING) != FALSE;
+}
+
 // 系统文件夹选择框。跑在自己的 STA 线程里：httplib 的工作线程不一定初始化过 COM，
 // 而且模态框会阻塞，不能占着请求线程。
 std::string pickFolder() {
@@ -522,6 +546,34 @@ void Backend::setupRoutes() {
       out["cwd"] = cwd;
       out["name"] = leafOf(cwd);
       if (!ok) out["error"] = err;
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 每个目录上次选过哪家 CLI：新会话菜单拿它当默认项
+  srv_.Get("/api/lasttool", [this](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(json{{"ok", true},
+                                {"items", loadLastTool(dataDir_ + "\\lasttool.json")}}),
+                    "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/lasttool", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      const std::string cwd = keyOfDir(jstr(body, "cwd"));
+      const std::string tool = jstr(body, "tool");
+      if (cwd.empty() || tool.empty()) {
+        out["error"] = "缺少 cwd 或 tool";
+      } else {
+        const std::string path = dataDir_ + "\\lasttool.json";
+        json map = loadLastTool(path);
+        map[cwd] = tool;
+        out["ok"] = saveLastTool(path, map);
+      }
     } catch (const std::exception& e) {
       out["error"] = e.what();
     }

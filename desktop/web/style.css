@@ -545,6 +545,17 @@ html, body {
   letter-spacing: .04em;
 }
 
+.mini-btn.more {
+  width: 22px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.cli-menu button[data-danger] { color: var(--magenta); }
+.cli-menu button[data-danger]:hover { background: rgba(var(--mag-rgb), .16); color: var(--magenta); }
+
 .mini-btn.new { color: var(--lime); border-color: rgba(var(--lime-rgb), .42); }
 .mini-btn.new:hover { background: rgba(var(--lime-rgb), .12); border-color: var(--lime); color: var(--lime); }
 .mini-btn.del { color: var(--muted); }

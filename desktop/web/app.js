@@ -332,12 +332,8 @@ function itemHtml(w, index) {
       <div class="ws-side">
         <button class="mini-btn new${w.added ? ' go' : ''}" data-newsess="${esc(w.cwd)}"
                 title="在这个目录开一个全新的会话（不续接）">新会话</button>
-        ${w.added ? '' : `<button class="mini-btn brief" data-brief="${esc(w.cwd)}" title="让本地模型复盘这个目录最近一次会话">复盘</button>`}
-        <button class="mini-btn" data-window="${esc(w.cwd)}" title="把这个目录单独开一个窗口">窗口</button>
-        <button class="mini-btn" data-reveal="${esc(w.cwd)}" title="在资源管理器打开">定位</button>
-        ${w.added
-          ? `<button class="mini-btn del" data-delws="${esc(w.cwd)}" title="只是从列表移除，不删目录">移除</button>`
-          : `<button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>`}
+        ${w.added ? '' : `<button class="mini-btn go" data-open="${esc(key)}" title="进入这个目录最近的一个对话">进入</button>`}
+        <button class="mini-btn more" data-acts="${esc(key)}" title="更多操作">⋯</button>
         ${w.added ? '' : `<span class="caret" title="${open ? '收起' : '展开对话列表'}"></span>`}
       </div>
     </div>
@@ -710,35 +706,119 @@ async function batchOpen(key) {
 
 const TOOL_LIST = ['claude', 'codebuddy', 'codex', 'kimi'];
 
+// 每个目录显式选过的 CLI（后端 lasttool.json 跨窗口共享）。
+// 优先级：显式选过 > 这个目录最近一条会话用的 > 默认
+const LAST_TOOL = {};
+
+// 目录键统一成「小写 + 反斜杠」：后端 keyOfDir 就是这么存的，
+// 而 cwd 在这里可能是 D:/x 也可能是 D:\x，不归一就查不到
+function cwdKey(p) {
+  return String(p || '').toLowerCase().replace(/\//g, '\\');
+}
+
 function lastToolFor(cwd) {
-  const ws = S.byId.get(String(cwd).toLowerCase());
+  const key = cwdKey(cwd);
+  if (LAST_TOOL[key]) return LAST_TOOL[key];
+  const ws = S.byId.get(key);
   const s = ws && (ws.sessions || [])[0];
   return (s && s.tool) || S.settings.defaultTool || 'claude';
 }
 
-function showCliMenu(anchor, cwd) {
+async function loadLastTool() {
+  try {
+    const r = await fetch('/api/lasttool').then((x) => x.json());
+    Object.assign(LAST_TOOL, r.items || {});
+  } catch (e) {
+    /* 读不到就按会话推断，不影响使用 */
+  }
+}
+
+function rememberTool(cwd, tool) {
+  const key = cwdKey(cwd);
+  LAST_TOOL[key] = tool;
+  if (DEMO) return;
+  fetch('/api/lasttool', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd, tool }),
+  }).catch(() => {});
+}
+
+// ---------------- 弹出菜单 ----------------
+// 卡片上的「⋯」和「新会话」的 CLI 选择共用同一个浮层，只是条目不一样。
+let menuPick = null;
+
+function showMenu(anchor, items, onPick, hint) {
   const menu = $('cli-menu');
-  const def = lastToolFor(cwd);
-  menu.innerHTML = TOOL_LIST.map((t) =>
-    `<button data-cli="${t}"${t === def ? ' class="on"' : ''}>${t}</button>`).join('') +
-    `<div class="cli-menu-hint">新会话 · ${esc(baseOf(cwd))}</div>`;
-  menu.dataset.cwd = cwd;
+  menu.innerHTML =
+    items.map((it) =>
+      `<button data-val="${esc(it.id)}"${it.on ? ' class="on"' : ''}${it.danger ? ' data-danger="1"' : ''}>` +
+      `${esc(it.label)}</button>`).join('') +
+    (hint ? `<div class="cli-menu-hint">${esc(hint)}</div>` : '');
+  menuPick = onPick;
   menu.hidden = false;
+
   const r = anchor.getBoundingClientRect();
-  const w = menu.offsetWidth || 132;
-  const h = menu.offsetHeight || 120;
+  const w = menu.offsetWidth || 140;
+  const h = menu.offsetHeight || 130;
   menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
   menu.style.top = Math.min(window.innerHeight - h - 8, r.bottom + 5) + 'px';
 }
 
-function hideCliMenu() {
+function hideMenu() {
   const m = $('cli-menu');
   if (m) m.hidden = true;
+  menuPick = null;
+}
+
+function showCliMenu(anchor, cwd) {
+  const def = lastToolFor(cwd);
+  showMenu(
+    anchor,
+    TOOL_LIST.map((t) => ({ id: t, label: t, on: t === def })),
+    (tool) => newSession(cwd, tool),
+    `新会话 · ${baseOf(cwd)}`
+  );
+}
+
+// 卡片上的次要动作。密度到上限了，五个按钮并排会挤掉标题，收进这里
+function showMoreMenu(anchor, key) {
+  const ws = S.byId.get(key);
+  if (!ws) return;
+  const items = [];
+  if (!ws.added) items.push({ id: 'brief', label: '复盘这个目录' });
+  items.push({ id: 'reveal', label: '在资源管理器打开' });
+  items.push({ id: 'window', label: '单独开一个窗口' });
+  if (ws.added) items.push({ id: 'del', label: '从列表移除', danger: true });
+
+  showMenu(anchor, items, (act) => {
+    if (act === 'brief') openBrief(ws.cwd);
+    else if (act === 'reveal') revealPath(ws.cwd);
+    else if (act === 'window') openWorkspaceWindow(ws.cwd);
+    else if (act === 'del') removeWorkspace(ws.cwd);
+  }, ws.name);
+}
+
+function revealPath(path) {
+  if (DEMO) {
+    toast('示例模式：不会打开资源管理器');
+    return;
+  }
+  fetch('/api/reveal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+    .then((r) => r.json())
+    .then((r) => { if (!r.ok) toast('打开资源管理器失败', true); })
+    .catch(() => toast('打开资源管理器失败', true));
 }
 
 async function newSession(cwd, tool) {
   if (!cwd) return;
   const t = TOOL_LIST.indexOf(tool) >= 0 ? tool : lastToolFor(cwd);
+  // 记住这个目录用了哪家：下次菜单默认高亮它，不用每次重选
+  rememberTool(cwd, t);
   if (DEMO) {
     toast(`示例模式：这里会开一个 ${t} 新会话`);
     return;
@@ -1257,14 +1337,6 @@ listEl.addEventListener('click', (e) => {
     return;
   }
 
-  // 复盘：让本地模型读一遍这个目录最近一次会话
-  const briefBtn = e.target.closest('[data-brief]');
-  if (briefBtn) {
-    e.stopPropagation();
-    openBrief(briefBtn.dataset.brief);
-    return;
-  }
-
   if (e.target.closest('[data-brief-redo]')) {
     fetchBrief(true);
     return;
@@ -1309,17 +1381,11 @@ listEl.addEventListener('click', (e) => {
     return;
   }
 
-  const delBtn = e.target.closest('[data-delws]');
-  if (delBtn) {
+  // 卡片上的「⋯」：复盘 / 定位 / 单独开窗 / 移除
+  const actsBtn = e.target.closest('[data-acts]');
+  if (actsBtn) {
     e.stopPropagation();
-    removeWorkspace(delBtn.dataset.delws);
-    return;
-  }
-
-  const winBtn = e.target.closest('[data-window]');
-  if (winBtn) {
-    e.stopPropagation();
-    openWorkspaceWindow(winBtn.dataset.window);
+    showMoreMenu(actsBtn, actsBtn.dataset.acts);
     return;
   }
 
@@ -1327,20 +1393,6 @@ listEl.addEventListener('click', (e) => {
   if (openBtn) {
     e.stopPropagation();
     doOpen([openBtn.dataset.open]);
-    return;
-  }
-
-  const revealBtn = e.target.closest('[data-reveal]');
-  if (revealBtn) {
-    e.stopPropagation();
-    if (DEMO) {
-      toast('示例模式：不会打开资源管理器');
-      return;
-    }
-    fetch('/api/reveal', { method: 'POST', body: JSON.stringify({ path: revealBtn.dataset.reveal }) })
-      .then((r) => r.json())
-      .then((r) => { if (!r.ok) toast('打开资源管理器失败', true); })
-      .catch(() => toast('打开资源管理器失败', true));
     return;
   }
 
@@ -2078,21 +2130,25 @@ $('ws-path').addEventListener('keydown', (e) => {
 });
 
 $('cli-menu').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-cli]');
+  const b = e.target.closest('[data-val]');
   if (!b) return;
-  newSession($('cli-menu').dataset.cwd, b.dataset.cli);
-  hideCliMenu();
+  // 先取出回调再关菜单：隐藏时会把 menuPick 清掉
+  const fn = menuPick;
+  const val = b.dataset.val;
+  hideMenu();
+  if (fn) fn(val);
 });
 
 // 点别处、滚动、缩放都关掉菜单，别让它挂在半空
 document.addEventListener('mousedown', (e) => {
   const m = $('cli-menu');
   if (!m || m.hidden) return;
-  if (e.target.closest('#cli-menu') || e.target.closest('[data-newsess]')) return;
-  hideCliMenu();
+  if (e.target.closest('#cli-menu') || e.target.closest('[data-newsess]') ||
+      e.target.closest('[data-acts]')) return;
+  hideMenu();
 });
-window.addEventListener('resize', hideCliMenu);
-window.addEventListener('blur', hideCliMenu);
+window.addEventListener('resize', hideMenu);
+window.addEventListener('blur', hideMenu);
 
 $('term-btn').addEventListener('click', () => {
   if (TM.panes.length) {
@@ -2180,7 +2236,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     if (!$('cli-menu').hidden) {
-      hideCliMenu();
+      hideMenu();
       return;
     }
     if (S.statsView) {
@@ -2237,6 +2293,7 @@ document.addEventListener('visibilitychange', () => {
 initOnlyChip();
 loadAutoStart();
 loadAgents();
+loadLastTool();
 // 先读收藏再扫目录：首屏就是「收藏在前的顺序」，不会先抖一下
 loadFavorites()
   .then(() => load(false))
