@@ -13,6 +13,9 @@ const FORCED_SKIN = ((location.hash.match(/[#&]skin=([a-z0-9]+)/i) || [])[1] || 
 
 // --only <目录> 会以 #only=<urlencoded> 传进来：这扇窗只服务一个工作区。
 // 大目录名里全是中文和空格，所以必须 decode 一次
+// --term 独立终端窗口：不显示目录列表，整个窗口都是终端
+const TERM_ONLY = /[#&]term=1/.test(location.hash);
+
 const ONLY_INIT = (() => {
   const m = location.hash.match(/[#&]only=([^&]*)/);
   if (!m) return '';
@@ -2051,6 +2054,89 @@ function termDrainQueue(pane) {
   if (pane.q.length) pane.qTimer = setTimeout(() => termDrainQueue(pane), 0);
 }
 
+
+// ---------------- 复制 / 粘贴 ----------------
+// xterm 自己不管剪贴板：Ctrl+C 会被当成中断发给程序。终端里选中的字一直复制不出来，
+// 所以这里补三件事——Ctrl+Shift+C/V、有选中时 Ctrl+C 走复制、右键复制。
+async function termCopy(pane) {
+  const sel = pane.term.getSelection();
+  if (!sel) {
+    toast('先选中要复制的内容', true);
+    return false;
+  }
+  // 优先走后端的系统剪贴板：不挑手势、不弹权限。JS 接口只当兜底
+  try {
+    const r = await fetch('/api/clipboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sel }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error('api');
+  } catch (e) {
+    try {
+      await navigator.clipboard.writeText(sel);
+    } catch (e2) {
+      const ta = document.createElement('textarea');
+      ta.value = sel;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e3) { /* 认了 */ }
+      ta.remove();
+    }
+  }
+  toast(`已复制 ${sel.length} 个字符`);
+  return true;
+}
+
+async function termPaste(pane) {
+  if (!pane.ws || pane.ws.readyState !== 1) {
+    toast('终端还没连上', true);
+    return;
+  }
+  let text = '';
+  try {
+    const r = await fetch('/api/clipboard').then((x) => x.json());
+    text = r.text || '';
+  } catch (e) {
+    text = '';
+  }
+  if (!text) {
+    try { text = await navigator.clipboard.readText(); } catch (e) { /* 读不到就算了 */ }
+  }
+  if (!text) {
+    toast('剪贴板是空的', true);
+    return;
+  }
+  pane.ws.send(new TextEncoder().encode(text));
+}
+
+// xterm 的按键钩子：返回 false 表示这个键不再交给终端
+function termKeyHandler(pane) {
+  return (ev) => {
+    if (ev.type !== 'keydown') return true;
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    if (ctrl && ev.shiftKey && ev.code === 'KeyC') {
+      ev.preventDefault();
+      termCopy(pane);
+      return false;
+    }
+    if (ctrl && ev.shiftKey && ev.code === 'KeyV') {
+      ev.preventDefault();
+      termPaste(pane);
+      return false;
+    }
+    // 有选中就复制，没选中才让 ^C 去打断程序 —— Windows Terminal 的习惯
+    if (ctrl && !ev.shiftKey && !ev.altKey && ev.code === 'KeyC' && pane.term.hasSelection()) {
+      ev.preventDefault();
+      termCopy(pane);
+      return false;
+    }
+    return true;
+  };
+}
+
 function termConnect(pane) {
   const ws = new WebSocket(`ws://${location.host}/api/term/ws?id=${encodeURIComponent(pane.id)}`);
   ws.binaryType = 'arraybuffer';
@@ -2086,8 +2172,9 @@ function termConnect(pane) {
 }
 
 async function termAddPane(opt = {}) {
-  if (TM.panes.length >= 4) {
-    toast('最多同时 4 个终端，先关掉一个', true);
+  const cap = TERM_ONLY ? 6 : 4;  // 独立终端窗口专门放窗格，多给两个位置
+  if (TM.panes.length >= cap) {
+    toast(`最多同时 ${cap} 个终端，先关掉一个`, true);
     return null;
   }
   termShow();
@@ -2131,6 +2218,13 @@ async function termAddPane(opt = {}) {
   });
   term.onData((d) => {
     if (pane.ws && pane.ws.readyState === 1) pane.ws.send(new TextEncoder().encode(d));
+  });
+  term.attachCustomKeyEventHandler(termKeyHandler(pane));
+  // 右键：有选中就复制（很多终端是这个习惯），没有就交给浏览器
+  el.addEventListener('contextmenu', (e) => {
+    if (!pane.term.hasSelection()) return;
+    e.preventDefault();
+    termCopy(pane);
   });
 
   pane.ro = new ResizeObserver(() => termFit(pane));
@@ -2326,6 +2420,23 @@ $('term-new').addEventListener('click', () => {
   termAddPane({ cwd: '', title: 'shell' });
 });
 $('term-hide').addEventListener('click', termCollapse);
+$('term-copy').addEventListener('click', () => {
+  if (TM.active) termCopy(TM.active);
+});
+// 独立终端窗口：适合扔到第二块屏，窗口里最多 6 个窗格
+$('term-pop').addEventListener('click', async () => {
+  if (DEMO) {
+    toast('示例模式不会开新窗口');
+    return;
+  }
+  try {
+    const r = await fetch('/api/termwin/new', { method: 'POST' }).then((x) => x.json());
+    if (r.ok) toast(r.focused ? '独立终端窗口已经在前面' : '已打开独立终端窗口');
+    else toast(r.error || '打不开独立窗口', true);
+  } catch (e) {
+    toast('打不开独立窗口：' + e.message, true);
+  }
+});
 
 $('term-tabs').addEventListener('click', (e) => {
   const b = e.target.closest('.term-tab');
@@ -2436,6 +2547,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
+if (TERM_ONLY) document.body.classList.add('term-only');
 initOnlyChip();
 loadAutoStart();
 loadAgents();
@@ -2447,7 +2559,10 @@ loadFavorites()
   .then(() => {
     expandOnly();
     if (onlyCwd) render();  // 展开状态是加在 S.expanded 上的，要重绘一次才看得见
-    termRestoreLayout();
+    termRestoreLayout().then(() => {
+      // 独立终端窗口没有列表可点，空着就等于一扇废窗：至少先起一个 shell
+      if (TERM_ONLY && !TM.panes.length) termAddPane({ cwd: '', title: 'shell' });
+    });
   });
 
 // 多个窗口之间同步收藏：切回来时静默对一次，变了才重绘

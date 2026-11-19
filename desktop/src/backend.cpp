@@ -146,13 +146,20 @@ json detectAgents() {
   return json{{"ok", true}, {"agents", out}};
 }
 
-bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::string& err) {  wchar_t exe[MAX_PATH] = {0};
+bool spawnWindow(const std::string& slug, const std::string& extraArgs, std::string& err);
+
+bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::string& err) {
+  return spawnWindow(slug, "--only \"" + cwd + "\"", err);
+}
+
+bool spawnWindow(const std::string& slug, const std::string& extraArgs, std::string& err) {
+  wchar_t exe[MAX_PATH] = {0};
   if (!GetModuleFileNameW(nullptr, exe, MAX_PATH)) {
     err = "拿不到自己的路径";
     return false;
   }
-  std::wstring cmd = L"\"" + std::wstring(exe) + L"\" --win " + utf8ToWide(slug) +
-                     L" --only \"" + utf8ToWide(cwd) + L"\"";
+  std::wstring cmd = L"\"" + std::wstring(exe) + L"\" --win " + utf8ToWide(slug) + L" " +
+                     utf8ToWide(extraArgs);
   STARTUPINFOW si{};
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi{};
@@ -162,10 +169,73 @@ bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::
   }
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
-  logf("spawn window slug=" + slug + " cwd=" + cwd);
+  logf("spawn window slug=" + slug + " args=" + extraArgs);
   return true;
 }
 
+
+
+// 系统剪贴板：WebView2 里 navigator.clipboard 在没有用户手势时会被拒绝，
+// 而桌面应用本来就能直接读写剪贴板，走 Win32 更稳
+std::string clipboardGet() {
+  std::string out;
+  for (int i = 0; i < 5; ++i) {  // 剪贴板可能被别的程序短暂占用
+    if (!OpenClipboard(nullptr)) {
+      Sleep(20);
+      continue;
+    }
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    if (h) {
+      const auto* w = static_cast<const wchar_t*>(GlobalLock(h));
+      if (w) {
+        out = wideToUtf8(w);
+        GlobalUnlock(h);
+      }
+    }
+    CloseClipboard();
+    break;
+  }
+  return out;
+}
+
+bool clipboardSet(const std::string& text) {
+  const std::wstring w = utf8ToWide(text);
+  for (int i = 0; i < 5; ++i) {
+    if (!OpenClipboard(nullptr)) {
+      Sleep(20);
+      continue;
+    }
+    EmptyClipboard();
+    const size_t bytes = (w.size() + 1) * sizeof(wchar_t);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!h) {
+      CloseClipboard();
+      return false;
+    }
+    void* p = GlobalLock(h);
+    memcpy(p, w.c_str(), bytes);
+    GlobalUnlock(h);
+    SetClipboardData(CF_UNICODETEXT, h);  // 成功后所有权归系统，不要 GlobalFree
+    CloseClipboard();
+    return true;
+  }
+  return false;
+}
+
+// httplib 的 bind 带 SO_REUSEADDR，Windows 上这会让第二个进程「绑定成功」同一个端口，
+// 「绑不上就换下一个」的逻辑根本不会触发 —— 两个窗口于是抢同一个端口，页面会连到
+// 别人的后端去。所以先用 connect 探一下，有人听就直接跳过
+bool portInUse(int p) {
+  SOCKET sk = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (sk == INVALID_SOCKET) return false;
+  sockaddr_in a{};
+  a.sin_family = AF_INET;
+  a.sin_port = htons(static_cast<u_short>(p));
+  a.sin_addr.s_addr = inet_addr("127.0.0.1");
+  const bool used = ::connect(sk, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0;
+  closesocket(sk);
+  return used;
+}
 
 // 环境变量里的代理指向一个没人监听的端口时，终端里的 claude/codebuddy 会报
 // "Connection refused"，可那行错误出现在终端里，很难让人联想到是环境变量过期。
@@ -675,6 +745,24 @@ void Backend::setupRoutes() {
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 
+  // 剪贴板：终端里的复制粘贴走这里，不依赖浏览器权限
+  srv_.Get("/api/clipboard", [](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(json{{"ok", true}, {"text", clipboardGet()}}),
+                    "application/json; charset=utf-8");
+  });
+
+  srv_.Post("/api/clipboard", [](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      out["ok"] = clipboardSet(jstr(body, "text"));
+    } catch (const std::exception& e) {
+      out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
   // 代理体检：环境变量指向的端口有没有人在听
   srv_.Get("/api/proxy", [](const httplib::Request&, httplib::Response& res) {
     res.set_header("Cache-Control", "no-store");
@@ -834,6 +922,25 @@ void Backend::setupRoutes() {
       }
     } catch (const std::exception& e) {
       out["error"] = e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 独立终端窗口：不列目录，只放终端。已经开着就把它提到前台
+  srv_.Post("/api/termwin/new", [](const httplib::Request&, httplib::Response& res) {
+    json out = {{"ok", false}};
+    const std::wstring cls = L"CliResumeWin_term";
+    if (HWND h = FindWindowW(cls.c_str(), nullptr)) {
+      ShowWindow(h, IsIconic(h) ? SW_RESTORE : SW_SHOW);
+      SetForegroundWindow(h);
+      out = {{"ok", true}, {"focused", true}};
+    } else {
+      std::string err;
+      if (spawnWindow("term", "--term", err)) {
+        out = {{"ok", true}, {"focused", false}};
+      } else {
+        out["error"] = err;
+      }
     }
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
@@ -1066,13 +1173,17 @@ void Backend::setupRoutes() {
 bool Backend::start() {
   setupRoutes();
   // 索引尽早开始建：第一次要通读几十上百个会话文件，早点跑完用户少等
-  search_.start(profileDir_);
-  summary_.start(profileDir_);
+  // 独立终端窗口用不到全文索引和复盘摘要：历史大的机器上会白占几百 MB
+  if (profile_ != "term") {
+    search_.start(profileDir_);
+    summary_.start(profileDir_);
+  }
   fav_.start(dataDir_);  // 收藏跨窗口共享，不跟 profile 走
   // 每个 WebSocket 终端独占一个线程（阻塞在 read 上），默认 8 个线程池不够
   // 两三个终端再叠加页面请求就会排队
   srv_.new_task_queue = [] { return new httplib::ThreadPool(32); };
   for (int p = 8712; p < 8760; ++p) {
+    if (portInUse(p)) continue;
     if (srv_.bind_to_port("127.0.0.1", p)) {
       port_ = p;
       break;

@@ -1591,6 +1591,20 @@ body.page-idle .brief-dot {
 .termdock[hidden] { display: none; }
 .termdock.collapsed { flex-basis: 0; overflow: hidden; border-top-color: var(--line); }
 .termdock.collapsed .term-bar,
+
+/* ---------------- 独立终端窗口（--term） ----------------
+   整扇窗只放终端：把顶栏和列表藏起来，面板撑满 */
+body.term-only .topbar,
+body.term-only .body { display: none; }
+body.term-only .termdock {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  border-top: 0;
+}
+body.term-only .term-drag,
+body.term-only #term-hide,
+body.term-only #term-pop { display: none; }
+
 .termdock.collapsed .term-grid { display: none; }
 
 .term-drag {

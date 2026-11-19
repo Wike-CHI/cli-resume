@@ -146,6 +146,9 @@ std::string actionScript(const std::string& act) {
 
 
 
+  if (act == "copytest") {
+    return "termAddPane({cwd:'',cmd:'',title:'copy test',ephemeral:true}).then(function(p){setTimeout(function(){p.term.selectAll();var x=p.term.getSelection();fetch('/api/log',{method:'POST',body:'copytest sel='+x.length+' head='+x.slice(0,24)});termCopy(p);},700);});";
+  }
   if (act == "moremenu") {
     // 卡片「⋯」的溢出菜单
     return "var b=document.querySelector('[data-acts]');if(b)b.click();";
@@ -496,7 +499,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   // 工作区窗口：--only <dir> 锁一个目录，--win <slug> 指定窗口 id（不给就按目录算）。
   // 每个窗口一个进程、一份 WebView2 数据目录、一份索引 —— 不共享就不会互相写坏
   const std::string onlyCwd = getArgValue("--only", "");
+  // --term：只放终端的独立窗口（没有列表），用独立 profile，窗格状态自己一份
+  const bool termOnly = hasArg("--term");
   std::string winSlug = getArgValue("--win", "");
+  if (termOnly && winSlug.empty()) winSlug = "term";
   if (winSlug.empty() && !onlyCwd.empty()) {
     std::string key = onlyCwd;
     for (auto& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -590,7 +596,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   if (wy < 0) wy = 0;
 
   // 工作区窗口的标题写目录名，任务栏里一眼分得清
-  std::wstring title = kTitle;
+  std::wstring title = termOnly ? L"CLI Resume — 终端" : kTitle;
   if (!onlyCwd.empty()) {
     std::string name = onlyCwd;
     size_t sep = name.find_last_of("\\/");
@@ -625,6 +631,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int) {
   if (!skin.empty()) {
     baseUrl += baseUrl.find('#') == std::string::npos ? "#skin=" : "&skin=";
     baseUrl += skin;
+  }
+  if (termOnly) {
+    baseUrl += baseUrl.find('#') == std::string::npos ? "#term=1" : "&term=1";
   }
   if (!onlyCwd.empty()) {
     // 目录里有中文和空格，hash 参数必须转义，否则 app.js 那边读出来是残的
