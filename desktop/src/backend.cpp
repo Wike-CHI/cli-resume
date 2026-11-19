@@ -823,7 +823,7 @@ void Backend::setupRoutes() {
 
       LaunchResult r = launch(list, opts);
       out = {{"ok", r.ok}, {"error", r.error}, {"command", r.command},
-             {"count", (int)list.size()}};
+             {"count", (int)list.size()}, {"fallback", r.fallback}};
     } catch (const std::exception& e) {
       out = {{"ok", false}, {"error", std::string("请求解析失败：") + e.what()}};
     }

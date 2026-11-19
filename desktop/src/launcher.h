@@ -25,7 +25,8 @@ struct LaunchOptions {
 struct LaunchResult {
   bool ok = false;
   std::string error;
-  std::string command;  // 便于前端展示/排错
+  std::string command;   // 便于前端展示/排错
+  bool fallback = false; // wt 没转过去，改用普通控制台窗口开的
 };
 
 // 一个工作区默认只恢复最近用过的那一个 CLI；openTwo 时两个都恢复

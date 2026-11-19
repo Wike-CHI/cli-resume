@@ -836,8 +836,12 @@ async function newSession(cwd, tool) {
           window: Number(S.settings.window) || 0,
         }),
       }).then((x) => x.json());
-      if (r.ok) toast(`已在 Windows Terminal 打开 ${t}`);
-      else toast(r.error || '打开失败', true);
+      if (r.ok) {
+        toast(r.fallback ? `Windows Terminal 没接住，已用普通控制台窗口打开 ${t}`
+                         : `已在 Windows Terminal 打开 ${t}`);
+      } else {
+        toast(r.error || '打开失败', true);
+      }
     } catch (e) {
       toast('打开失败：' + e.message, true);
     }
@@ -1504,7 +1508,9 @@ async function launchItems(items, note, quiet) {
     if (r.ok) {
       const n = note || items.length;
       if (!quiet) {
-        toast(n === 1 ? `已进入「${items[0].title || '该对话'}」` : `已在 Windows Terminal 打开 ${n} 个标签页`);
+        toast(r.fallback
+          ? `Windows Terminal 没接住，已用普通控制台窗口打开 ${n} 个会话`
+          : (n === 1 ? `已进入「${items[0].title || '该对话'}」` : `已在 Windows Terminal 打开 ${n} 个标签页`));
       }
       plog('open ok ' + (r.command || ''));
       return true;
