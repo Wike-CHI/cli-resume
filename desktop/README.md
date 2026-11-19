@@ -265,6 +265,17 @@ Kimi 这块的要点：
 - **用量字段自成一套**：`usage.record` 里是 `inputOther` / `output` / `inputCacheRead` /
   `inputCacheCreation`，528 条记录对应 540 次请求，是逐次增量而不是累计，直接相加即可
 
+### 代理过期也会被查出来
+
+终端里的 CLI 连不上时，报的是它自己的 `Connection refused`，很难让人想到是环境变量里的
+`HTTPS_PROXY` 指向了一个早就关掉的端口。左栏 DIAGNOSTIC 会读一遍 `HTTPS_PROXY` / `HTTP_PROXY` /
+`ALL_PROXY`，解析出主机端口，用 250ms 的超时去连一下：
+
+- 通 → 不占版面，什么都不显示（正常情况不该多一行噪音）
+- 不通 → 红叉一行：`代理 127.0.0.1:7897 没在监听 · 终端里的 CLI 会连不上`
+
+端口是运行时读的，改了环境变量重启应用就生效，不需要重新编译。
+
 ### 只检测、不接入的
 
 `GET /api/agents` 扫一遍已知目录，返回装了哪些 agent、各自多少会话。左栏 DIAGNOSTIC 用

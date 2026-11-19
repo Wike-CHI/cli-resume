@@ -1657,6 +1657,19 @@ $('set-save').addEventListener('click', async () => {
   load(true);
 });
 
+
+// 代理体检：环境变量指向的端口没人听时，终端里的 CLI 会报 Connection refused，
+// 那句话和「代理过期」很难联想到一起，所以在诊断区直接说清楚
+async function loadProxy() {
+  // 示例模式也查：代理坏了跟界面是示例还是真实无关
+  try {
+    S.proxy = await fetch('/api/proxy').then((x) => x.json());
+    renderDoctor();
+  } catch (e) {
+    /* 体检失败不影响主流程 */
+  }
+}
+
 function renderDoctor() {
   const box = $('doctor');
   if (!box) return;
@@ -1682,6 +1695,12 @@ function renderDoctor() {
     lines.push(row(!!r.claudeFound, 'claude：' + (r.claude || '')));
   }
   lines.push(row(true, `${S.all.length} 个可用目录 / ${S.stats.totalSessions || 0} 个对话`));
+
+  // 只在代理确实不可达时报警：正常的代理不需要多占一行
+  const px = S.proxy;
+  if (px && px.set && !px.alive) {
+    lines.push(row(false, `代理 ${px.host}:${px.port} 没在监听 · 终端里的 CLI 会连不上`));
+  }
   box.innerHTML = lines.join('');
 }
 
@@ -2358,6 +2377,7 @@ initOnlyChip();
 loadAutoStart();
 loadAgents();
 loadLastTool();
+loadProxy();
 // 先读收藏再扫目录：首屏就是「收藏在前的顺序」，不会先抖一下
 loadFavorites()
   .then(() => load(false))

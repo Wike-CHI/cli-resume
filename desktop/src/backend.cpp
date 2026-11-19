@@ -166,6 +166,76 @@ bool spawnWorkspaceWindow(const std::string& slug, const std::string& cwd, std::
   return true;
 }
 
+
+// 环境变量里的代理指向一个没人监听的端口时，终端里的 claude/codebuddy 会报
+// "Connection refused"，可那行错误出现在终端里，很难让人联想到是环境变量过期。
+// 这里主动连一下，把结论摆到诊断区
+json proxyStatus() {
+  const char* keys[] = {"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
+                        "ALL_PROXY", "all_proxy"};
+  std::string raw;
+  for (const char* k : keys) {
+    if (const char* v = std::getenv(k)) {
+      if (*v) {
+        raw = v;
+        break;
+      }
+    }
+  }
+  json out = {{"set", false}, {"url", ""}, {"alive", true}};
+  if (raw.empty()) return out;
+  out["set"] = true;
+  out["url"] = raw;
+
+  std::string host = raw;
+  size_t p = host.find("://");
+  if (p != std::string::npos) host = host.substr(p + 3);
+  p = host.find('@');  // 去掉 user:pass@
+  if (p != std::string::npos) host = host.substr(p + 1);
+  p = host.find('/');
+  if (p != std::string::npos) host = host.substr(0, p);
+
+  int port = 0;
+  const size_t colon = host.find_last_of(':');
+  if (colon != std::string::npos) {
+    port = std::atoi(host.c_str() + colon + 1);
+    host = host.substr(0, colon);
+  }
+  if (port <= 0) port = 80;
+  out["host"] = host;
+  out["port"] = port;
+
+  bool alive = false;
+  addrinfo hints{};
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo* res = nullptr;
+  if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) == 0 && res) {
+    SOCKET sk = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sk != INVALID_SOCKET) {
+      u_long nb = 1;
+      ioctlsocket(sk, FIONBIO, &nb);
+      ::connect(sk, res->ai_addr, static_cast<int>(res->ai_addrlen));
+      fd_set wf;
+      FD_ZERO(&wf);
+      FD_SET(sk, &wf);
+      timeval tv{0, 250000};
+      if (select(0, nullptr, &wf, nullptr, &tv) > 0) {
+        int err = 0;
+        int len = sizeof(err);
+        if (getsockopt(sk, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len) == 0 &&
+            err == 0) {
+          alive = true;
+        }
+      }
+      closesocket(sk);
+    }
+    freeaddrinfo(res);
+  }
+  out["alive"] = alive;
+  return out;
+}
+
 // ---------------- 工作空间（用户手动添加的目录） ----------------
 // 扫描只能发现「有过会话的目录」。想在一个全新的仓库里开第一场对话，
 // 就得先把目录本身登记下来 —— 存 workspaces.json，和收藏一样放 dataDir，跨窗口共享。
@@ -603,6 +673,12 @@ void Backend::setupRoutes() {
     out["ok"] = removed > 0 && saveExtraWs(path, kept);
     out["removed"] = removed;
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 代理体检：环境变量指向的端口有没有人在听
+  srv_.Get("/api/proxy", [](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_content(dumpJson(proxyStatus()), "application/json; charset=utf-8");
   });
 
   // 跨会话正文检索：索引在后台建，没建完时前端显示进度，不影响列表使用
