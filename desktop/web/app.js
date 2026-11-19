@@ -175,7 +175,10 @@ function applySettings(s) {
   $('set-range').value = String(S.settings.maxAgeHours);
   $('set-window').value = String(S.settings.window);
   const tm = $('set-term');
-  if (tm) tm.value = S.settings.termMode === 'external' ? 'external' : 'embedded';
+  if (tm) {
+    const v = S.settings.termMode;
+    tm.value = v === 'external' ? 'external' : (v === 'term' ? 'term' : 'embedded');
+  }
   const rs = $('set-restore');
   if (rs) rs.value = S.settings.restoreLayout === false ? '0' : '1';
   if ($('set-llm-url')) $('set-llm-url').value = S.settings.llmUrl || '';
@@ -685,8 +688,8 @@ async function toggleFav(el) {
 async function batchOpen(key) {
   const ws = S.byId.get(key);
   if (!ws) return;
-  const embedded = S.settings.termMode !== 'external';
-  const cap = embedded ? 4 : 8;
+  const mode = S.settings.termMode;
+  const cap = mode === 'external' ? 8 : (mode === 'term' ? 6 : 4);
   // 尊重当前视图：勾了「只看收藏」就只恢复收藏的，别偷偷把别的会话也拉起来
   const onlyFav = $('opt-fav') && $('opt-fav').checked;
   const pool = onlyFav ? (ws.sessions || []).filter(isFav) : (ws.sessions || []);
@@ -774,13 +777,21 @@ function hideMenu() {
   menuPick = null;
 }
 
-function showCliMenu(anchor, cwd) {
+function showCliMenu(anchor, cwd, dest) {
   const def = lastToolFor(cwd);
+  const items = TOOL_LIST.map((t) => ({ id: t, label: t, on: t === def }));
+  if (!dest) items.push({ id: '__term__', label: '↗ 独立窗口新开' });
   showMenu(
     anchor,
-    TOOL_LIST.map((t) => ({ id: t, label: t, on: t === def })),
-    (tool) => newSession(cwd, tool),
-    `新会话 · ${baseOf(cwd)}`
+    items,
+    (tool) => {
+      if (tool === '__term__') {
+        showCliMenu(anchor, cwd, 'term');
+        return;
+      }
+      newSession(cwd, tool, dest || '');
+    },
+    `新会话 · ${baseOf(cwd)}` + (dest === 'term' ? ' · 独立窗口' : '')
   );
 }
 
@@ -792,12 +803,14 @@ function showMoreMenu(anchor, key) {
   if (!ws.added) items.push({ id: 'brief', label: '复盘这个目录' });
   items.push({ id: 'reveal', label: '在资源管理器打开' });
   items.push({ id: 'window', label: '单独开一个窗口' });
+  items.push({ id: 'termwin', label: '↗ 独立终端窗口打开' });
   if (ws.added) items.push({ id: 'del', label: '从列表移除', danger: true });
 
   showMenu(anchor, items, (act) => {
     if (act === 'brief') openBrief(ws.cwd);
     else if (act === 'reveal') revealPath(ws.cwd);
     else if (act === 'window') openWorkspaceWindow(ws.cwd);
+    else if (act === 'termwin') openInTermWindow(ws.cwd, (ws.sessions || [])[0]);
     else if (act === 'del') removeWorkspace(ws.cwd);
   }, ws.name);
 }
@@ -817,13 +830,60 @@ function revealPath(path) {
     .catch(() => toast('打开资源管理器失败', true));
 }
 
-async function newSession(cwd, tool) {
+
+// 把某个会话（或新会话）送进独立终端窗口。窗口没开就拉起来，开着就提到前面
+
+async function openInTermWindowBatch(items) {
+  try {
+    const r = await fetch('/api/termwin/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    }).then((x) => x.json());
+    return r;
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function openInTermWindow(cwd, s) {
+  if (DEMO) {
+    toast('示例模式：不会开新窗口');
+    return null;
+  }
+  try {
+    const r = await fetch('/api/termwin/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          cwd,
+          tool: (s && s.tool) || lastToolFor(cwd),
+          sessionId: (s && s.sessionId) || '',
+          title: (s && s.title) || baseOf(cwd),
+        }],
+      }),
+    }).then((x) => x.json());
+    if (!r.ok) toast(r.error || '打不开独立窗口', true);
+    return r;
+  } catch (e) {
+    toast('打不开独立窗口：' + e.message, true);
+    return null;
+  }
+}
+
+async function newSession(cwd, tool, dest) {
   if (!cwd) return;
   const t = TOOL_LIST.indexOf(tool) >= 0 ? tool : lastToolFor(cwd);
   // 记住这个目录用了哪家：下次菜单默认高亮它，不用每次重选
   rememberTool(cwd, t);
   if (DEMO) {
     toast(`示例模式：这里会开一个 ${t} 新会话`);
+    return;
+  }
+  if (dest === 'term' || (!dest && S.settings.termMode === 'term')) {
+    const r = await openInTermWindow(cwd, { tool: t, sessionId: '', title: `新会话 · ${baseOf(cwd)}` });
+    if (r && r.ok) toast(r.focused ? '已送进独立窗口' : '已打开独立终端窗口');
     return;
   }
 
@@ -1493,6 +1553,14 @@ async function launchItems(items, note, quiet) {
   if (!items || !items.length) {
     toast('没有可进入的对话', true);
     return false;
+  }
+  // 独立窗口：一次把 items 全部写进待开清单
+  if (S.settings.termMode === 'term') {
+    const r = await openInTermWindowBatch(items);
+    if (!quiet) {
+      toast(r && r.ok ? `已送进独立窗口 ${items.length} 个会话` : '送进独立窗口失败', !(r && r.ok));
+    }
+    return !!(r && r.ok);
   }
   // 默认走应用内终端；设置里切成 external 才回到 Windows Terminal
   if (S.settings.termMode !== 'external') {
@@ -2547,7 +2615,27 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // 启动：先扫目录，再按上次的布局把终端铺回来（示例模式不恢复）
-if (TERM_ONLY) document.body.classList.add('term-only');
+if (TERM_ONLY) {
+  document.body.classList.add('term-only');
+  // 主窗口把「要开的会话」写进清单，这里取走就开窗格
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/termwin/queue').then((x) => x.json());
+      for (const it of (r && r.items) || []) {
+        if (TM.panes.length >= 6) break;
+        termAddPane({
+          cwd: it.cwd || '',
+          cmd: it.cmd || '',
+          title: it.title || it.tool || 'terminal',
+          tool: it.tool || '',
+          sessionId: it.sessionId || '',
+        });
+      }
+    } catch (e) {
+      /* 主窗口没跑也不影响 */
+    }
+  }, 1500);
+}
 initOnlyChip();
 loadAutoStart();
 loadAgents();

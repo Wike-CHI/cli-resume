@@ -148,6 +148,13 @@ LaunchResult fallbackConsole(const std::vector<LaunchItem>& items, const Shell& 
 
 }  // namespace
 
+std::string buildResumeCommand(const std::string& tool, const std::string& sessionId) {
+  LaunchItem it;
+  it.tool = tool;
+  it.sessionId = sessionId;
+  return resumeCommand(it, false);
+}
+
 std::vector<LaunchItem> pickItems(const Workspace& ws, bool openTwo) {
   std::vector<LaunchItem> out;
   if (ws.sessions.empty()) return out;

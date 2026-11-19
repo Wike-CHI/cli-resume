@@ -47,7 +47,7 @@ json defaultSettings() {
       {"useContinue", false},
       {"window", 0},
       {"theme", "neon"},  // "neon"（80s CRT）| "win98"
-      {"termMode", "embedded"},  // "embedded"（应用内终端）| "external"（Windows Terminal）
+      {"termMode", "embedded"},  // "embedded" | "external"（Windows Terminal）| "term"（独立终端窗口）
       {"restoreLayout", true},   // 启动时按上次的窗格铺开并自动 --resume
       {"llmUrl", "http://127.0.0.1:11434"},  // 本地模型地址（Ollama / OpenAI 兼容都认）
       {"llmModel", ""},                       // 留空自动挑（优先 qwen 系）
@@ -942,6 +942,89 @@ void Backend::setupRoutes() {
         out["error"] = err;
       }
     }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 把会话送进独立终端窗口：写一份「待开清单」，再叫醒 / 拉起那扇窗。
+  // 跨进程没法直接调对方的接口，用同一个 dataDir 下的文件传话最省事
+  srv_.Post("/api/termwin/open", [this](const httplib::Request& req, httplib::Response& res) {
+    json out = {{"ok", false}};
+    try {
+      json body = json::parse(req.body);
+      json items = jval(body, "items", json::array());
+      if (!items.is_array() || items.empty()) {
+        out["error"] = "没有要打开的会话";
+        res.set_content(dumpJson(out), "application/json; charset=utf-8");
+        return;
+      }
+
+      const std::string dir = dataDir_ + "\win-term";
+      CreateDirectoryA(dir.c_str(), nullptr);
+      const std::string path = dir + "\queue.json";
+
+      json queue = json::array();
+      {
+        std::ifstream in(utf8ToWide(path), std::ios::binary);
+        if (in) {
+          std::string raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+          try {
+            auto old = json::parse(raw);
+            if (old.contains("items") && old["items"].is_array()) queue = old["items"];
+          } catch (...) {
+          }
+        }
+      }
+      for (const auto& it : items) {
+        const std::string tool = jstr(it, "tool");
+        const std::string sid = jstr(it, "sessionId");
+        queue.push_back(json{{"cwd", jstr(it, "cwd")},
+                             {"tool", tool},
+                             {"sessionId", sid},
+                             {"title", jstr(it, "title")},
+                             {"cmd", buildResumeCommand(tool, sid)}});
+      }
+      {
+        std::ofstream f(utf8ToWide(path), std::ios::binary);
+        f << dumpJson(json{{"items", queue}});
+      }
+
+      out = {{"ok", true}, {"queued", static_cast<int>(items.size())}};
+      const std::wstring cls = L"CliResumeWin_term";
+      if (HWND h = FindWindowW(cls.c_str(), nullptr)) {
+        ShowWindow(h, IsIconic(h) ? SW_RESTORE : SW_SHOW);
+        SetForegroundWindow(h);
+        out["focused"] = true;
+      } else {
+        std::string err;
+        if (spawnWindow("term", "--term", err)) {
+          out["focused"] = false;
+        } else {
+          out["error"] = err;
+        }
+      }
+      logf("termwin open queued=" + std::to_string(items.size()));
+    } catch (const std::exception& e) {
+      out["error"] = std::string("请求解析失败：") + e.what();
+    }
+    res.set_content(dumpJson(out), "application/json; charset=utf-8");
+  });
+
+  // 终端窗口自己来取待开清单（取完即删）
+  srv_.Get("/api/termwin/queue", [this](const httplib::Request&, httplib::Response& res) {
+    json out = {{"ok", true}, {"items", json::array()}};
+    const std::string path = dataDir_ + "\win-term\queue.json";
+    std::ifstream f(utf8ToWide(path), std::ios::binary);
+    if (f) {
+      std::string raw((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+      f.close();
+      try {
+        auto j = json::parse(raw);
+        if (j.contains("items")) out["items"] = j["items"];
+      } catch (...) {
+      }
+      DeleteFileW(utf8ToWide(path).c_str());
+    }
+    res.set_header("Cache-Control", "no-store");
     res.set_content(dumpJson(out), "application/json; charset=utf-8");
   });
 

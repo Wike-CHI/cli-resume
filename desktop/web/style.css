@@ -513,6 +513,7 @@ html, body {
   position: fixed;
   z-index: 95;
   min-width: 132px;
+  max-width: 260px;
   padding: 5px;
   display: flex;
   flex-direction: column;
@@ -524,6 +525,7 @@ html, body {
 .cli-menu[hidden] { display: none; }
 .cli-menu button {
   padding: 5px 9px;
+  white-space: nowrap;
   border: 0;
   background: transparent;
   color: var(--text);

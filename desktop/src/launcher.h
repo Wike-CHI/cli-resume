@@ -29,6 +29,9 @@ struct LaunchResult {
   bool fallback = false; // wt 没转过去，改用普通控制台窗口开的
 };
 
+// 按工具拼出续接命令（sessionId 为空就是裸命令）。外部终端和独立窗口共用同一套规则
+std::string buildResumeCommand(const std::string& tool, const std::string& sessionId);
+
 // 一个工作区默认只恢复最近用过的那一个 CLI；openTwo 时两个都恢复
 std::vector<LaunchItem> pickItems(const Workspace& ws, bool openTwo);
 
