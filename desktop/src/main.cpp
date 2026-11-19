@@ -146,9 +146,7 @@ std::string actionScript(const std::string& act) {
 
 
 
-  if (act == "copytest") {
-    return "termAddPane({cwd:'',cmd:'',title:'copy test',ephemeral:true}).then(function(p){setTimeout(function(){p.term.selectAll();var x=p.term.getSelection();fetch('/api/log',{method:'POST',body:'copytest sel='+x.length+' head='+x.slice(0,24)});termCopy(p);},700);});";
-  }
+
   if (act == "moremenu") {
     // 卡片「⋯」的溢出菜单
     return "var b=document.querySelector('[data-acts]');if(b)b.click();";
