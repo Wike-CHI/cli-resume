@@ -852,7 +852,14 @@ async function newSession(cwd, tool) {
   const pane = await termAddPane({
     cwd, cmd: t, title: `${t} · 新会话`, tool: t, sessionId: '', ephemeral: true,
   });
-  if (pane) toast(`已在 ${baseOf(cwd)} 开一个 ${t} 新会话`);
+  if (pane) {
+    // 这时候还没有标题：CLI 要等你说上几句话才会给它生成一个。
+    // 先记下开窗时间，之后去会话文件里认领
+    pane.since = Date.now();
+    pane.autoTitle = true;
+    termWatchTitles();
+    toast(`已在 ${baseOf(cwd)} 开一个 ${t} 新会话`);
+  }
 }
 
 // ---------------- 新建工作空间 ----------------
@@ -1923,6 +1930,61 @@ function termLayout() {
   termRenderTabs();
 }
 
+
+// ---------------- 新会话的标题 ----------------
+// 刚开的会话没有标题，标签只能写「claude · 新会话」。等 CLI 把标题生成出来
+// （落到会话文件里），再把标签换成它 —— 和列表卡片上看到的是同一个标题。
+let titleTimer = 0;
+
+function termWatchTitles() {
+  if (titleTimer || DEMO) return;
+  titleTimer = setInterval(termSyncTitles, 9000);
+}
+
+async function termSyncTitles() {
+  const pending = TM.panes.filter((p) => p.autoTitle && !p.dead);
+  if (!pending.length) {
+    clearInterval(titleTimer);
+    titleTimer = 0;
+    return;
+  }
+  // 开了窗格却一直没说话的话，别无限轮询下去（看创建时间，不看匹配窗口）
+  for (const p of pending) {
+    if (Date.now() - (p.born || p.since) > 12 * 60 * 1000) p.autoTitle = false;
+  }
+
+  let data = null;
+  try {
+    data = await fetch(`/api/scan?maxAge=${S.range}&refresh=1`).then((x) => x.json());
+  } catch (e) {
+    return;
+  }
+  const ws = data && data.workspaces;
+  if (!Array.isArray(ws)) return;
+
+  const claimed = new Set(TM.panes.filter((p) => p.sessionId).map((p) => p.sessionId));
+  let changed = false;
+  for (const p of TM.panes) {
+    if (!p.autoTitle || !p.cwd) continue;
+    const w = ws.find((x) => cwdKey(x.cwd) === cwdKey(p.cwd));
+    if (!w) continue;
+    // 只认「开这个窗格之后才出现」的会话；同目录开了两个新窗格时按时间就近配对
+    const hit = (w.sessions || [])
+      .filter((x) => (!p.tool || x.tool === p.tool) && x.mtime >= p.since - 15000 &&
+                     !claimed.has(x.sessionId))
+      .sort((a, b) => Math.abs(a.mtime - p.since) - Math.abs(b.mtime - p.since))[0];
+    if (!hit || !hit.title) continue;
+
+    p.title = hit.title.length > 46 ? hit.title.slice(0, 45) + '…' : hit.title;
+    p.sessionId = hit.sessionId;
+    p.autoTitle = false;
+    claimed.add(hit.sessionId);
+    plog(`title adopted ${p.tool} "${p.title}"`);
+    changed = true;
+  }
+  if (changed) termRenderTabs();
+}
+
 function termRenderTabs() {
   const box = $('term-tabs');
   if (!box) return;
@@ -2048,6 +2110,7 @@ async function termAddPane(opt = {}) {
     title: opt.title || 'terminal', cwd: opt.cwd || '', cmd: opt.cmd || '',
     tool: opt.tool || '', sessionId: opt.sessionId || '',
     ephemeral: !!opt.ephemeral,
+    born: Date.now(),  // 窗格创建时间：判断「等标题等太久」用它，不用 since
     cols: 0, rows: 0, ro: null,
   };
   TM.panes.push(pane);
