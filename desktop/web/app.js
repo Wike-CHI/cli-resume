@@ -113,7 +113,7 @@ function toast(text, isErr) {
 
 // ---------------- 数据 ----------------
 
-async function load(force) {
+async function load(force, quiet) {
   if (S.busy) return;
   S.busy = true;
   const btn = $('refresh');
@@ -133,7 +133,7 @@ async function load(force) {
     return;
   }
 
-  renderSkeleton();
+  if (!quiet) renderSkeleton();
 
   try {
     const url = `/api/scan?maxAge=${S.range}${force ? '&refresh=1' : ''}`;
@@ -685,6 +685,41 @@ async function toggleFav(el) {
 }
 
 // 一键恢复一个目录的会话：内嵌面板最多 4 个窗格，外部终端一次开 8 个标签
+
+// 一键恢复：按最近用过的时间，把会话依次打开。目标跟着「进入方式」走
+function restoreCap() {
+  const mode = S.settings.termMode;
+  return mode === 'external' ? 8 : (mode === 'term' ? 6 : 4);
+}
+
+async function restoreAll(dryRun) {
+  const cap = restoreCap();
+  // 已经开在面板里的别重复开
+  const opened = new Set(TM.panes.map((p) => p.sessionId).filter(Boolean));
+  const pool = [];
+  for (const ws of S.all || []) {
+    for (const s of ws.sessions || []) pool.push({ cwd: ws.cwd, s });
+  }
+  pool.sort((a, b) => (b.s.mtime || 0) - (a.s.mtime || 0));
+
+  const items = [];
+  for (const { cwd, s } of pool) {
+    if (items.length >= cap) break;
+    if (opened.has(s.sessionId)) continue;
+    items.push({ cwd, tool: s.tool, sessionId: s.sessionId, title: s.title });
+  }
+  if (!items.length) {
+    toast('没有可恢复的会话', true);
+    return;
+  }
+  if (dryRun) {
+    plog(`restore dry cap=${cap} items=${items.map((x) => x.title).join(' | ')}`);
+    return;
+  }
+  const ok = await launchItems(items, items.length, true);
+  if (ok) toast(`已恢复 ${items.length} 个会话`);
+}
+
 async function batchOpen(key) {
   const ws = S.byId.get(key);
   if (!ws) return;
@@ -1774,6 +1809,18 @@ function renderDoctor() {
   }
   lines.push(row(true, `${S.all.length} 个可用目录 / ${S.stats.totalSessions || 0} 个对话`));
 
+  // 一键恢复的按钮跟着「进入方式」写清楚开到哪儿
+  const ra = $('restore-all');
+  if (ra && !TERM_ONLY) {
+    const mode = S.settings.termMode;
+    ra.textContent = `一键恢复最近 ${restoreCap()} 个`;
+    const hint = $('restore-hint');
+    if (hint) {
+      hint.textContent = mode === 'external' ? '打开到：Windows Terminal'
+        : mode === 'term' ? '打开到：独立终端窗口' : '打开到：应用内终端';
+    }
+  }
+
   // 只在代理确实不可达时报警：正常的代理不需要多占一行
   const px = S.proxy;
   if (px && px.set && !px.alive) {
@@ -2434,6 +2481,7 @@ async function termOpenItems(items) {
 $('stats-btn').addEventListener('click', openStats);
 
 // ---------------- 工作空间表单与 CLI 菜单 ----------------
+$('restore-all').addEventListener('click', restoreAll);
 $('ws-add').addEventListener('click', () => {
   const f = $('ws-form');
   f.hidden = !f.hidden;
@@ -2656,13 +2704,20 @@ if (TERM_ONLY) {
       const r = await fetch('/api/termwin/queue').then((x) => x.json());
       for (const it of (r && r.items) || []) {
         if (TM.panes.length >= 6) break;
-        termAddPane({
+        const created = await termAddPane({
           cwd: it.cwd || '',
           cmd: it.cmd || '',
           title: it.title || it.tool || 'terminal',
           tool: it.tool || '',
           sessionId: it.sessionId || '',
         });
+        // 新会话还没有名字：等 CLI 把它起出来之后换成真标题
+        if (created && !it.sessionId) {
+          created.since = Date.now();
+          created.autoTitle = true;
+          termWatchTitles();
+          plog(`title watch armed ${it.tool} ${created.cwd || ''}`);
+        }
       }
     } catch (e) {
       /* 主窗口没跑也不影响 */
@@ -2685,6 +2740,15 @@ loadFavorites()
       if (TERM_ONLY && !TM.panes.length) termAddPane({ cwd: '', title: 'shell' });
     });
   });
+
+// 每分钟静默重扫一次：本轮新建的会话不用手动点刷新才会出现
+// （扫描本身几十毫秒，缓存 20 秒；这里带上 refresh=1 强制重扫）
+setInterval(async () => {
+  if (DEMO || document.hidden || S.busy) return;
+  const y = window.scrollY;
+  await load(true, true);
+  if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+}, 60000);
 
 // 多个窗口之间同步收藏：切回来时静默对一次，变了才重绘
 window.addEventListener('focus', async () => {

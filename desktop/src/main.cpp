@@ -148,6 +148,7 @@ std::string actionScript(const std::string& act) {
 
 
 
+
   if (act == "moremenu") {
     // 卡片「⋯」的溢出菜单
     return "var b=document.querySelector('[data-acts]');if(b)b.click();";
