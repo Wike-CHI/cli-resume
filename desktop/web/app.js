@@ -2062,7 +2062,8 @@ function termRenderTabs() {
   box.innerHTML = TM.panes
     .map((p, i) =>
       `<button class="term-tab${p === TM.active ? ' on' : ''}${p.ws ? '' : ' dead'}"` +
-      ` data-i="${i}" title="${esc(p.cwd || p.title)}"><b>${i + 1}</b>${esc(p.title)}</button>`)
+      ` data-i="${i}" title="${esc(p.cwd || p.title)}"><b>${i + 1}</b>${esc(p.title)}` +
+      `${p.reconnecting ? ' ⟳' : ''}</button>`)
     .join('');
 }
 
@@ -2206,13 +2207,24 @@ function termKeyHandler(pane) {
 }
 
 function termConnect(pane) {
+  if (pane.dead) return;
+  if (pane.reconnectTimer) {
+    clearTimeout(pane.reconnectTimer);
+    pane.reconnectTimer = 0;
+  }
   const ws = new WebSocket(`ws://${location.host}/api/term/ws?id=${encodeURIComponent(pane.id)}`);
   ws.binaryType = 'arraybuffer';
   pane.ws = ws;
+
   ws.onopen = () => {
-    pane.el.classList.remove('dead');
+    const again = (pane.retry || 0) > 0;
+    pane.retry = 0;
+    pane.el.classList.remove('dead', 'reconnecting');
     termFit(pane);
     if (TM.active === pane) pane.term.focus();
+    if (again) {
+      try { pane.term.writeln('\r\n\x1b[90m[已重连][0m'); } catch (e) { /* 终端可能已经没了 */ }
+    }
     termRenderTabs();
   };
   ws.onmessage = (ev) => {
@@ -2221,23 +2233,44 @@ function termConnect(pane) {
   };
   ws.onerror = () => {
     // 连不上也要说一声，否则窗格就是一块沉默的黑框
-    if (!pane.dead && !pane.wsDown) {
+    if (!pane.wsDown) {
       pane.wsDown = true;
-      try { pane.term.writeln('\r\n\x1b[90m[终端连接失败，检查是否有别的实例占着端口]\x1b[0m'); } catch (e) {}
+      if (!(pane.retry > 0)) {
+        try { pane.term.writeln('\r\n\x1b[90m[终端连接失败，检查是否有别的实例占着端口][0m'); } catch (e) {}
+      }
     }
   };
   ws.onclose = () => {
+    if (pane.ws !== ws) return;  // 旧连接迟到的关闭事件，忽略
     pane.ws = null;
-    pane.el.classList.add('dead');
+    if (pane.dead) return;       // 用户关掉的窗格不用重连
     pane.q = [];
     if (pane.qTimer) clearTimeout(pane.qTimer);
-    // 断线不能只靠边框变色：画面还停着上一帧，看着就是「卡死」
-    if (!pane.dead) {
-      try { pane.term.writeln('\r\n\x1b[90m[连接已断开，右上角 × 关掉重开]\x1b[0m'); } catch (e) {}
+    // 断线不提示「关掉重开」：会话还在后端活着，重连回来内容都在
+    if (!(pane.retry > 0)) {
+      try { pane.term.writeln('\r\n\x1b[90m[连接断开，正在重连…][0m'); } catch (e) {}
     }
+    pane.el.classList.add('reconnecting');
+    pane.retry = Math.min((pane.retry || 0) + 1, 8);
+    // 800ms 起，逐步退到 6s：窗口挂起几分钟也不会刷出一堆重试
+    const wait = Math.min(800 * Math.pow(1.6, pane.retry - 1), 6000);
+    pane.reconnectTimer = setTimeout(() => termConnect(pane), wait);
     termRenderTabs();
   };
 }
+
+// 从最小化 / 挂起回来时立刻补一次：挂起期间定时器不走，不能干等
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  for (const p of TM.panes) {
+    if (!p.dead && (!p.ws || p.ws.readyState > WebSocket.OPEN)) termConnect(p);
+  }
+});
+window.addEventListener('online', () => {
+  for (const p of TM.panes) {
+    if (!p.dead && (!p.ws || p.ws.readyState > WebSocket.OPEN)) termConnect(p);
+  }
+});
 
 async function termAddPane(opt = {}) {
   const cap = TERM_ONLY ? 6 : 4;  // 独立终端窗口专门放窗格，多给两个位置

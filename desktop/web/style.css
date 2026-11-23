@@ -1607,6 +1607,7 @@ body.term-only .term-drag,
 body.term-only #term-hide,
 body.term-only #term-pop { display: none; }
 
+.term-pane.reconnecting .term-hd { opacity: .55; }
 .termdock.collapsed .term-grid { display: none; }
 
 .term-drag {

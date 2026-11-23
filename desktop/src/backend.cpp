@@ -1212,9 +1212,10 @@ void Backend::setupRoutes() {
       return;
     }
     // 输出方向单开一个线程，handler 自己的线程专心阻塞读键盘输入
+    const int gen = ++s->attachGen_;
     std::atomic<bool> stopPump{false};
     std::thread pump([&] {
-      while (!stopPump.load() && ws.is_open()) {
+      while (!stopPump.load() && ws.is_open() && s->attachGen_.load() == gen) {
         std::string chunk = s->drain(200);
         if (chunk.empty()) continue;
         if (!ws.send(chunk.data(), chunk.size())) break;
@@ -1241,8 +1242,10 @@ void Backend::setupRoutes() {
     }
     stopPump.store(true);
     if (pump.joinable()) pump.join();
-    // 面板关掉、页面刷新都会走到这里：会话跟着回收，不在后台留 node 进程
-    terms_.close(id);
+    // 断开不杀会话：窗口最小化、WebView 被挂起、系统睡眠都会让 WS 断掉，
+    // 一断就 close 等于「用了一小时，回来终端全没了」。真正的回收走 /api/term/close，
+    // 也就是用户关掉那个窗格的时候
+    logf("term ws detached id=" + id);
   });
 
   srv_.Get(R"(/.*)", [this](const httplib::Request& req, httplib::Response& res) {

@@ -38,6 +38,9 @@ class TermSession : public std::enable_shared_from_this<TermSession> {
 
   std::string id;
   std::string title;
+  // 谁在接管输出：新连接进来就把代号加一，旧连接的泵线程看到代号变了会自己退出，
+  // 避免两个客户端同时 drain 把输出切碎
+  std::atomic<int> attachGen_{0};
 
  private:
   void readLoop();
