@@ -702,10 +702,14 @@ async function restoreAll(dryRun) {
   }
   pool.sort((a, b) => (b.s.mtime || 0) - (a.s.mtime || 0));
 
+  // 临时目录里的会话不算「现场」：.cache / AppData / node_modules 这些
+  // 是工具自己落盘的地方，一把恢复出来只是给标签栏添乱
+  const scratch = [/\\\.cache\\/i, /\\appdata\\/i, /\\node_modules\\/i, /\\temp\\/i, /\\\.git\\/i];
   const items = [];
   for (const { cwd, s } of pool) {
     if (items.length >= cap) break;
     if (opened.has(s.sessionId)) continue;
+    if (scratch.some((re) => re.test(cwd + '\\'))) continue;
     items.push({ cwd, tool: s.tool, sessionId: s.sessionId, title: s.title });
   }
   if (!items.length) {
