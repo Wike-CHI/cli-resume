@@ -149,6 +149,9 @@ std::string actionScript(const std::string& act) {
 
 
 
+  if (act == "smoketerm") {
+    return "termAddPane({cwd:'C:/Users/Administrator',cmd:'',title:'smoke'}).then(function(p){setTimeout(function(){var rs=p.ws?p.ws.readyState:-1;fetch('/api/log',{method:'POST',body:'smoketerm state='+rs+' text='+p.term.buffer.active.length});},3000);});";
+  }
   if (act == "moremenu") {
     // 卡片「⋯」的溢出菜单
     return "var b=document.querySelector('[data-acts]');if(b)b.click();";

@@ -2016,10 +2016,12 @@ async function termRestoreLayout() {
   const h = Math.min(Math.round(Number(lay.height) || 0), Math.round(window.innerHeight * 0.7));
   if (h >= 120) dock.style.flexBasis = h + 'px';
   for (const p of panes) {
+    // 旧布局里可能存过完整路径当标题，恢复时顺手收拾一下
+    const t = p.title && !/[\\/]/.test(p.title) ? p.title : (p.title ? baseOf(p.cwd || p.title) : 'shell');
     await termAddPane({
       cwd: p.cwd || '',
       cmd: p.cmd || '',
-      title: p.title || 'shell',
+      title: t,
       tool: p.tool || '',
       sessionId: p.sessionId || '',
     });
@@ -2471,10 +2473,17 @@ function termCmdFor(it) {
 
 async function termOpenItems(items) {
   for (const it of items) {
-    await termAddPane({
-      cwd: it.cwd, cmd: termCmdFor(it), title: it.title || it.cwd,
+    // 标题别退回完整路径：标签栏里一长串 C:\Users\...\cache 既难看又没用
+    const pane = await termAddPane({
+      cwd: it.cwd, cmd: termCmdFor(it), title: it.title || baseOf(it.cwd),
       tool: it.tool, sessionId: it.sessionId,
     });
+    // 没有标题说明 CLI 还没给它起名，挂上监听，等真标题出来再换
+    if (pane && !it.title) {
+      pane.since = Date.now();
+      pane.autoTitle = true;
+      termWatchTitles();
+    }
   }
 }
 

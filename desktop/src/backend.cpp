@@ -1204,7 +1204,13 @@ void Backend::setupRoutes() {
     res.set_content("{\"ok\":true}", "application/json; charset=utf-8");
   });
 
+  // 终端 WS 上关掉心跳与回溯超时：
+  // WebView2 被挂起时不会回 pong，httplib 默认 30s 一次 ping、超时就 close，
+  // 5 分钟没有新数据也会 read Fail —— 表现就是窗口藏一会儿回来，终端在反复重连
+  srv_.set_websocket_ping_interval(0);
   srv_.WebSocket("/api/term/ws", [this](const httplib::Request& req, httplib::ws::WebSocket& ws) {
+    // 0 = 一直等下去。没有这个，默认 300 秒没数据就当连接死了
+    ws.set_read_timeout(0);
     std::string id = req.has_param("id") ? req.get_param_value("id") : "";
     auto s = terms_.find(id);
     if (!s) {
